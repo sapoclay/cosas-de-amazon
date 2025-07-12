@@ -1,5 +1,7 @@
 # 🛒 Cosas de Amazon - Plugin de WordPress
 
+<img width="1024" height="1024" alt="logo" src="https://github.com/user-attachments/assets/5c746924-3678-40be-a222-9fe39f7eb753" />
+
 [![WordPress](https://img.shields.io/badge/WordPress-5.0+-blue.svg)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/PHP-7.4+-purple.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/License-GPL%20v2+-green.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
@@ -333,7 +335,7 @@ Las contribuciones son bienvenidas. Para contribuir:
 
 ## 📄 Licencia
 
-Este proyecto está licenciado bajo la GPL v2+ - ver el archivo [LICENSE](LICENSE) para más detalles.
+Este proyecto está licenciado bajo MIT LICENSE - ver el archivo [LICENSE](LICENSE) para más detalles.
 
 ## 👨‍💻 Autor
 
