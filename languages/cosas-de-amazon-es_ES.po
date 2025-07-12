@@ -1,0 +1,58 @@
+# Cosas de Amazon - Archivo de traducciones POT
+# Copyright (C) 2025 entreunosyceros
+# This file is distributed under the same license as the Cosas de Amazon package.
+msgid ""
+msgstr ""
+"Project-Id-Version: Cosas de Amazon 1.0.0\n"
+"Report-Msgid-Bugs-To: https://entreunosyceros.com\n"
+"POT-Creation-Date: 2025-07-04 12:00+0000\n"
+"PO-Revision-Date: 2025-07-04 12:00+0000\n"
+"Last-Translator: entreunosyceros\n"
+"Language-Team: Español\n"
+"Language: es_ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Producto de Amazon"
+msgstr "Producto de Amazon"
+
+msgid "Muestra un producto de Amazon usando un enlace corto"
+msgstr "Muestra un producto de Amazon usando un enlace corto"
+
+msgid "amazon"
+msgstr "amazon"
+
+msgid "producto"
+msgstr "producto"
+
+msgid "tienda"
+msgstr "tienda"
+
+msgid "Configuración del Producto"
+msgstr "Configuración del Producto"
+
+msgid "URL de Amazon"
+msgstr "URL de Amazon"
+
+msgid "Introduce la URL corta de Amazon (ej: https://amzn.to/46xGJyG)"
+msgstr "Introduce la URL corta de Amazon (ej: https://amzn.to/46xGJyG)"
+
+msgid "Estilo de Visualización"
+msgstr "Estilo de Visualización"
+
+msgid "Estilo de tarjeta"
+msgstr "Estilo de tarjeta"
+
+msgid "Elementos a Mostrar"
+msgstr "Elementos a Mostrar"
+
+msgid "Mostrar precio"
+msgstr "Mostrar precio"
+
+msgid "Mostrar descuento"
+msgstr "Mostrar descuento"
+
+msgid "Mostrar descripción"
+msgstr "Mostrar descripción"
