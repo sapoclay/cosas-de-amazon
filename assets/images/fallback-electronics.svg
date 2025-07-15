@@ -1,0 +1,40 @@
+<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8f9fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+  
+  <!-- Border -->
+  <rect x="10" y="10" width="280" height="280" fill="none" stroke="#dee2e6" stroke-width="2" rx="8"/>
+  
+  <!-- Electronics icon -->
+  <g transform="translate(150,120)">
+    <!-- Smartphone/Device -->
+    <rect x="-30" y="-40" width="60" height="80" rx="8" fill="none" stroke="#6c757d" stroke-width="2"/>
+    <rect x="-25" y="-32" width="50" height="55" fill="#f8f9fa" stroke="#6c757d"/>
+    <circle cx="0" cy="30" r="6" fill="none" stroke="#6c757d" stroke-width="2"/>
+    <rect x="-15" y="-25" width="30" height="3" rx="1" fill="#6c757d"/>
+    
+    <!-- WiFi signals -->
+    <g transform="translate(20,-20)">
+      <path d="M-10,-5 Q0,-15 10,-5" fill="none" stroke="#007bff" stroke-width="2"/>
+      <path d="M-6,-8 Q0,-12 6,-8" fill="none" stroke="#007bff" stroke-width="2"/>
+      <path d="M-2,-9 Q0,-10 2,-9" fill="none" stroke="#007bff" stroke-width="2"/>
+    </g>
+  </g>
+  
+  <!-- Text -->
+  <text x="150" y="220" font-family="Arial, sans-serif" font-size="14" fill="#495057" text-anchor="middle" font-weight="500">Producto Electrónico</text>
+  <text x="150" y="240" font-family="Arial, sans-serif" font-size="12" fill="#6c757d" text-anchor="middle">Imagen no disponible</text>
+  
+  <!-- Amazon-style corners -->
+  <path d="M20,20 L30,20 M20,20 L20,30" stroke="#ff9900" stroke-width="2" stroke-linecap="round"/>
+  <path d="M280,20 L270,20 M280,20 L280,30" stroke="#ff9900" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20,280 L30,280 M20,280 L20,270" stroke="#ff9900" stroke-width="2" stroke-linecap="round"/>
+  <path d="M280,280 L270,280 M280,280 L280,270" stroke="#ff9900" stroke-width="2" stroke-linecap="round"/>
+</svg>

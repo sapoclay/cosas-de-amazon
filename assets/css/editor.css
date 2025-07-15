@@ -1,0 +1,392 @@
+/**
+ * Estilos para el editor de bloques - Cosas de Amazon
+ * Version: 1.3.0
+ * Estos estilos deben coincidir con los del frontend (style.css)
+ */
+
+/* Estilos específicos del editor */
+.cosas-amazon-block-editor {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+.cosas-amazon-placeholder {
+    padding: 40px;
+    text-align: center;
+    border: 2px dashed #ccd0d4;
+    border-radius: 8px;
+    background: #f9f9f9;
+    margin: 20px 0;
+}
+
+.cosas-amazon-placeholder p {
+    margin: 0 0 20px 0;
+    color: #666;
+    font-size: 16px;
+}
+
+/* Contenedor principal del producto EN EL EDITOR */
+.editor-styles-wrapper .cosas-amazon-product,
+.block-editor-writing-flow .cosas-amazon-product {
+    background: #fff;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.editor-styles-wrapper .cosas-amazon-product:hover,
+.block-editor-writing-flow .cosas-amazon-product:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+
+/* Estilo horizontal en el editor */
+.editor-styles-wrapper .cosas-amazon-horizontal,
+.block-editor-writing-flow .cosas-amazon-horizontal {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-image {
+    flex-shrink: 0;
+    width: 150px;
+}
+
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-content,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-content {
+    flex: 1;
+}
+
+/* Estilo vertical en el editor */
+.editor-styles-wrapper .cosas-amazon-vertical,
+.block-editor-writing-flow .cosas-amazon-vertical {
+    text-align: center !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+}
+
+.editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-image {
+    margin-bottom: 15px !important;
+}
+
+.editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-image img,
+.block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-image img {
+    max-width: 200px !important;
+}
+
+/* Títulos en el editor */
+.editor-styles-wrapper .cosas-amazon-title,
+.block-editor-writing-flow .cosas-amazon-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin: 0 0 10px 0;
+    line-height: 1.4;
+}
+
+/* Precios en el editor */
+.editor-styles-wrapper .cosas-amazon-pricing,
+.block-editor-writing-flow .cosas-amazon-pricing {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 10px 0;
+    position: relative;
+}
+
+.editor-styles-wrapper .cosas-amazon-price,
+.block-editor-writing-flow .cosas-amazon-price {
+    font-size: 24px;
+    font-weight: 700;
+    color: #B12704;
+}
+
+.editor-styles-wrapper .cosas-amazon-original-price,
+.block-editor-writing-flow .cosas-amazon-original-price {
+    font-size: 16px;
+    color: #999;
+    text-decoration: line-through;
+    margin-left: 8px;
+}
+
+.editor-styles-wrapper .cosas-amazon-discount,
+.block-editor-writing-flow .cosas-amazon-discount {
+    background: #B12704;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    margin-left: 8px;
+}
+
+/* Botones en el editor */
+.editor-styles-wrapper .cosas-amazon-button,
+.block-editor-writing-flow .cosas-amazon-button {
+    margin-top: 15px;
+}
+
+.editor-styles-wrapper .cosas-amazon-btn,
+.block-editor-writing-flow .cosas-amazon-btn {
+    display: inline-block;
+    background: #FF9900;
+    color: white;
+    padding: 12px 24px;
+    text-decoration: none !important;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.editor-styles-wrapper .cosas-amazon-btn:hover,
+.block-editor-writing-flow .cosas-amazon-btn:hover {
+    background: #e88900;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    color: white;
+    text-decoration: none !important;
+}
+
+/* Tamaños de bloque en el editor */
+.editor-styles-wrapper .cosas-amazon-size-small,
+.block-editor-writing-flow .cosas-amazon-size-small {
+    padding: 15px;
+    margin: 15px 0;
+    max-width: 350px;
+}
+
+.editor-styles-wrapper .cosas-amazon-size-medium,
+.block-editor-writing-flow .cosas-amazon-size-medium {
+    padding: 20px;
+    margin: 20px 0;
+    max-width: 500px;
+}
+
+.editor-styles-wrapper .cosas-amazon-size-large,
+.block-editor-writing-flow .cosas-amazon-size-large {
+    padding: 24px;
+    margin: 24px 0;
+    max-width: 700px;
+}
+
+/* Múltiples productos en el editor */
+.editor-styles-wrapper .cosas-amazon-multiple-products,
+.block-editor-writing-flow .cosas-amazon-multiple-products {
+    display: grid;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+/* Imágenes en el editor */
+.editor-styles-wrapper .cosas-amazon-image img,
+.block-editor-writing-flow .cosas-amazon-image img {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    object-fit: cover;
+    max-width: 100%;
+}
+
+/* Responsive en el editor */
+@media (max-width: 782px) {
+    .editor-styles-wrapper .cosas-amazon-horizontal,
+    .block-editor-writing-flow .cosas-amazon-horizontal {
+        flex-direction: column;
+    }
+    
+    .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-image,
+    .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-image {
+        width: 100%;
+        max-width: 200px;
+        margin: 0 auto;
+    }
+}
+
+/* Notificaciones en el editor */
+.cosas-amazon-block-editor .components-notice {
+    margin: 10px 0;
+}
+
+/* Botones del inspector */
+.components-panel__body .components-button {
+    margin-bottom: 8px;
+}
+
+.components-panel__body .components-button.is-primary {
+    background: #007cba;
+    border-color: #007cba;
+}
+
+.components-panel__body .components-button.is-secondary {
+    background: transparent;
+    border-color: #007cba;
+    color: #007cba;
+}
+
+/* Campos de texto */
+.components-text-control__input {
+    font-family: inherit;
+}
+
+/* Select controls */
+.components-select-control__input {
+    font-family: inherit;
+}
+
+/* Toggle controls */
+.components-toggle-control {
+    margin-bottom: 16px;
+}
+
+/* Panel body spacing */
+.components-panel__body-title {
+    font-weight: 600;
+}
+
+.components-panel__body .components-base-control {
+    margin-bottom: 16px;
+}
+
+/* Improve visibility in editor */
+.block-editor-block-list__layout .cosas-amazon-block-editor {
+    position: relative;
+}
+
+/* Block toolbar compatibility */
+.cosas-amazon-block-editor .block-editor-block-toolbar {
+    z-index: 21;
+}
+
+/* Custom notice styling */
+.cosas-amazon-block-editor .components-notice.is-error {
+    border-left-color: #d63638;
+    background-color: #fef7f7;
+}
+
+.cosas-amazon-block-editor .components-notice.is-success {
+    border-left-color: #00a32a;
+    background-color: #f0f8ff;
+}
+
+/* Oferta especial en el editor */
+.editor-styles-wrapper .cosas-amazon-special-offer,
+.block-editor-writing-flow .cosas-amazon-special-offer {
+    margin: 8px 0;
+    position: relative;
+}
+
+.editor-styles-wrapper .cosas-amazon-special-offer span,
+.block-editor-writing-flow .cosas-amazon-special-offer span {
+    background: #e74c3c;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
+    animation: pulse-offer 2s infinite;
+}
+
+@keyframes pulse-offer {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* Valoraciones en el editor */
+.editor-styles-wrapper .cosas-amazon-rating,
+.block-editor-writing-flow .cosas-amazon-rating {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0;
+    font-size: 14px;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+}
+
+.editor-styles-wrapper .cosas-amazon-rating {
+    display: flex !important;
+}
+
+.block-editor-writing-flow .cosas-amazon-rating {
+    display: flex !important;
+}
+
+.editor-styles-wrapper .cosas-amazon-stars,
+.block-editor-writing-flow .cosas-amazon-stars {
+    display: flex;
+    gap: 2px;
+}
+
+.editor-styles-wrapper .cosas-amazon-star,
+.block-editor-writing-flow .cosas-amazon-star {
+    width: 16px;
+    height: 16px;
+    color: #FFA500;
+    font-size: 16px;
+}
+
+.editor-styles-wrapper .cosas-amazon-star.full,
+.block-editor-writing-flow .cosas-amazon-star.full {
+    color: #FFA500;
+}
+
+.editor-styles-wrapper .cosas-amazon-star.half,
+.block-editor-writing-flow .cosas-amazon-star.half {
+    color: #FFA500;
+    position: relative;
+}
+
+.editor-styles-wrapper .cosas-amazon-star.half::after,
+.block-editor-writing-flow .cosas-amazon-star.half::after {
+    content: '★';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 50%;
+    overflow: hidden;
+    color: #FFA500;
+}
+
+.editor-styles-wrapper .cosas-amazon-star.empty,
+.block-editor-writing-flow .cosas-amazon-star.empty {
+    color: #DDD;
+}
+
+.editor-styles-wrapper .cosas-amazon-rating-number,
+.block-editor-writing-flow .cosas-amazon-rating-number {
+    font-weight: 600;
+    color: #333;
+}
+
+.editor-styles-wrapper .cosas-amazon-review-count,
+.block-editor-writing-flow .cosas-amazon-review-count {
+    color: #666;
+    font-size: 13px;
+}
+
+.editor-styles-wrapper .cosas-amazon-review-count::before,
+.block-editor-writing-flow .cosas-amazon-review-count::before {
+    content: '(';
+}
+
+.editor-styles-wrapper .cosas-amazon-review-count::after,
+.block-editor-writing-flow .cosas-amazon-review-count::after {
+    content: ')';
+}
