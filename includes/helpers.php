@@ -830,6 +830,13 @@ class CosasAmazonHelpers {
         
         // Extraer número de reseñas
         $review_count_patterns = [
+            // Patrones específicos para el ID acrCustomerReviewText
+            '/<span[^>]*id="acrCustomerReviewText"[^>]*>([0-9.,]+)[^<]*?<\/span>/i',
+            '/<span[^>]*id="acrCustomerReviewText"[^>]*>([^<]*?([0-9.,]+)[^<]*?)<\/span>/i',
+            '/<span[^>]*id="acrCustomerReviewText"[^>]*>([0-9.,]+)[^<]*?valoraciones?[^<]*?<\/span>/i',
+            '/<span[^>]*id="acrCustomerReviewText"[^>]*>([0-9.,]+)[^<]*?reseñas?[^<]*?<\/span>/i',
+            '/<span[^>]*id="acrCustomerReviewText"[^>]*>([0-9.,]+)[^<]*?reviews?[^<]*?<\/span>/i',
+            // Patrones existentes
             '/<span[^>]*class="[^"]*a-size-base[^"]*"[^>]*>([0-9.,]+)[^<]*?valoraciones?[^<]*?<\/span>/i',
             '/<span[^>]*class="[^"]*a-size-base[^"]*"[^>]*>([0-9.,]+)[^<]*?reseñas?[^<]*?<\/span>/i',
             '/<span[^>]*class="[^"]*a-size-base[^"]*"[^>]*>([0-9.,]+)[^<]*?reviews?[^<]*?<\/span>/i',
@@ -838,7 +845,17 @@ class CosasAmazonHelpers {
         
         foreach ($review_count_patterns as $pattern) {
             if (preg_match($pattern, $html, $matches)) {
-                $review_count = preg_replace('/[^0-9]/', '', $matches[1]);
+                // Para el primer patrón acrCustomerReviewText, el número está en matches[1]
+                // Para el segundo patrón acrCustomerReviewText, el número está en matches[2]
+                $review_count = '';
+                if (isset($matches[2]) && !empty($matches[2])) {
+                    // Patrón con grupo adicional
+                    $review_count = preg_replace('/[^0-9]/', '', $matches[2]);
+                } else {
+                    // Patrón directo
+                    $review_count = preg_replace('/[^0-9]/', '', $matches[1]);
+                }
+                
                 if (!empty($review_count) && is_numeric($review_count)) {
                     $product_data['reviewCount'] = $review_count;
                     break;

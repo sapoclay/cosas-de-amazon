@@ -28,6 +28,9 @@ class CosasAmazonAdmin {
         
         // Inyectar CSS dinámico en el frontend
         add_action('wp_head', array($this, 'inject_dynamic_css'), 20);
+        
+        // Ocultar footer de WordPress en páginas del plugin
+        add_action('admin_init', array($this, 'hide_wordpress_footer'));
     }
     
     // Función para sanitizar las opciones generales
@@ -272,10 +275,13 @@ class CosasAmazonAdmin {
     }
     
     public function enqueue_admin_styles($hook) {
-        // Solo cargar en nuestras páginas de configuración
-        if ($hook !== 'settings_page_cosas-amazon-settings' && $hook !== 'toplevel_page_cosas-amazon-main') {
+        // Cargar en todas las páginas de administración que contengan 'cosas-amazon'
+        if (strpos($hook, 'cosas-amazon') === false && strpos($_GET['page'] ?? '', 'cosas-amazon') === false) {
             return;
         }
+        
+        // Debug: ver qué hook se está ejecutando
+        error_log('[COSAS_AMAZON_DEBUG] Hook actual: ' . $hook);
         
         // Enqueue jQuery para las funcionalidades interactivas
         wp_enqueue_script('jquery');
@@ -553,69 +559,109 @@ class CosasAmazonAdmin {
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
                 console.log("Cosas Amazon Admin JS cargado");
-                console.log("Ajax URL:", cosas_amazon_admin.ajax_url);
-                console.log("Nonce:", cosas_amazon_admin.nonce);
+                
+                // Verificar que las variables están disponibles
+                if (typeof cosas_amazon_admin === "undefined") {
+                    console.error("Variables cosas_amazon_admin no están definidas");
+                    return;
+                }
+                
+                // Función helper para hacer peticiones AJAX
+                function makeAjaxRequest(action, button, resultsDiv, successCallback) {
+                    var originalText = button.text();
+                    button.prop("disabled", true).text("Procesando...");
+                    resultsDiv.html("<div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"></div>");
+                    
+                    $.ajax({
+                        url: cosas_amazon_admin.ajax_url,
+                        type: "POST",
+                        data: {
+                            action: action,
+                            nonce: cosas_amazon_admin.nonce
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                if (successCallback) {
+                                    successCallback(response);
+                                } else {
+                                    resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + response.data + "</p></div>");
+                                }
+                            } else {
+                                resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error: " + response.data + "</p></div>");
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error de conexión: " + error + "</p></div>");
+                        },
+                        complete: function() {
+                            button.prop("disabled", false).text(originalText);
+                        }
+                    });
+                }
+                
+                // Botón para limpiar cache
+                $(document).on("click", "#clear-cache-btn", function() {
+                    if (!confirm("¿Estás seguro de que quieres limpiar todo el cache?")) {
+                        return;
+                    }
+                    
+                    var btn = $(this);
+                    var resultsDiv = $("#cache-action-results");
+                    
+                    makeAjaxRequest("clear_cache", btn, resultsDiv);
+                });
+                
+                // Botón para estadísticas de cache
+                $(document).on("click", "#get-cache-stats-btn", function() {
+                    var btn = $(this);
+                    var resultsDiv = $("#cache-results");
+                    
+                    makeAjaxRequest("get_cache_stats", btn, resultsDiv);
+                });
+                
+                // Botón para forzar actualización
+                $(document).on("click", "#force-update-btn", function() {
+                    if (!confirm("¿Estás seguro de que quieres forzar la actualización de todos los productos?")) {
+                        return;
+                    }
+                    
+                    var btn = $(this);
+                    var resultsDiv = $("#cache-action-results");
+                    
+                    makeAjaxRequest("cosas_amazon_force_update", btn, resultsDiv, function(response) {
+                        resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + response.data.message + " (Productos actualizados: " + response.data.count + ")</p></div>");
+                    });
+                });
                 
                 // Botón para ejecutar tests
-                $("#run-tests-btn").click(function() {
-                    console.log("Botón ejecutar tests clickeado");
+                $(document).on("click", "#run-tests-btn", function() {
                     var btn = $(this);
                     var resultsDiv = $("#tests-results");
                     
-                    btn.prop("disabled", true).text("Ejecutando...");
-                    resultsDiv.html("<p>Ejecutando tests...</p>");
-                    
-                    $.post(cosas_amazon_admin.ajax_url, {
-                        action: "cosas_amazon_debug",
-                        nonce: cosas_amazon_admin.nonce
-                    }, function(response) {
-                        if (response.success) {
-                            var html = "<div class=\\"notice notice-success\\"><p>✅ Tests ejecutados correctamente</p></div>";
-                            html += "<div style=\\"background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px;\\">";
-                            html += "<strong>Información del sistema:</strong><br>";
-                            html += "WordPress: " + response.data.debug_info.wordpress_version + "<br>";
-                            html += "PHP: " + response.data.debug_info.php_version + "<br>";
-                            html += "Plugin: " + response.data.debug_info.plugin_version + "<br>";
-                            html += "Memoria: " + response.data.debug_info.memory_limit + "<br>";
-                            html += "</div>";
-                            resultsDiv.html(html);
-                        } else {
-                            var errorMsg = response.data ? response.data : "Error desconocido";
-                            resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ Error en los tests: " + errorMsg + "</p></div>");
-                        }
-                        btn.prop("disabled", false).text("Ejecutar Tests");
-                    }).fail(function(xhr, status, error) {
-                        resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ Error de conexión: " + error + "</p></div>");
-                        btn.prop("disabled", false).text("Ejecutar Tests");
+                    makeAjaxRequest("cosas_amazon_debug", btn, resultsDiv, function(response) {
+                        var html = "<div class=\"notice notice-success\"><p>✅ Tests ejecutados correctamente</p></div>";
+                        html += "<div style=\"background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px;\">";
+                        html += "<strong>Información del sistema:</strong><br>";
+                        html += "WordPress: " + response.data.debug_info.wordpress_version + "<br>";
+                        html += "PHP: " + response.data.debug_info.php_version + "<br>";
+                        html += "Plugin: " + response.data.debug_info.plugin_version + "<br>";
+                        html += "Memoria: " + response.data.debug_info.memory_limit + "<br>";
+                        html += "</div>";
+                        resultsDiv.html(html);
                     });
                 });
                 
                 // Botón para debug AJAX
-                $("#debug-ajax-btn").click(function() {
-                    console.log("Botón debug AJAX clickeado");
+                $(document).on("click", "#debug-ajax-btn", function() {
                     var btn = $(this);
                     var resultsDiv = $("#tests-results");
                     
-                    btn.prop("disabled", true).text("Ejecutando...");
-                    
-                    $.post(cosas_amazon_admin.ajax_url, {
-                        action: "cosas_amazon_debug",
-                        nonce: cosas_amazon_admin.nonce
-                    }, function(response) {
-                        if (response.success) {
-                            var html = "<div class=\\"notice notice-success\\"><p>✅ Debug AJAX funcionando</p></div>";
-                            html += "<pre style=\\"background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 12px; max-height: 200px; overflow-y: auto;\\">";
-                            html += JSON.stringify(response.data.debug_info, null, 2);
-                            html += "</pre>";
-                            resultsDiv.html(html);
-                        } else {
-                            var errorMsg = response.data ? response.data : "Error desconocido";
-                            resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ Error en debug AJAX: " + errorMsg + "</p></div>");
-                        }
-                        btn.prop("disabled", false).text("Debug AJAX");
-                    }).fail(function(xhr, status, error) {
-                        resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ Error de conexión: " + error + "</p></div>");
-                        btn.prop("disabled", false).text("Debug AJAX");
+                    makeAjaxRequest("cosas_amazon_debug", btn, resultsDiv, function(response) {
+                        var html = "<div class=\"notice notice-success\"><p>✅ Debug AJAX funcionando</p></div>";
+                        html += "<pre style=\"background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 12px; max-height: 200px; overflow-y: auto;\">";
+                        html += JSON.stringify(response.data.debug_info, null, 2);
+                        html += "</pre>";
+                        resultsDiv.html(html);
                     });
                 });
                 
@@ -682,72 +728,6 @@ class CosasAmazonAdmin {
                     })
                     .finally(() => {
                         btn.prop("disabled", false).text("Probar URL");
-                    });
-                });
-                
-                // Botón para limpiar cache
-                $("#clear-cache-btn").click(function() {
-                    if (!confirm("¿Estás seguro de que quieres limpiar todo el cache?")) {
-                        return;
-                    }
-                    
-                    var btn = $(this);
-                    var resultsDiv = $("#cache-results");
-                    
-                    btn.prop("disabled", true).text("Limpiando...");
-                    resultsDiv.html("<div class=\\"spinner is-active\\" style=\\"float: none; margin: 10px 0;\\"></div>");
-                    
-                    $.ajax({
-                        url: ajaxurl,
-                        type: "POST",
-                        data: {
-                            action: "clear_cache",
-                            nonce: "<?php echo wp_create_nonce(\'cda_admin_nonce\'); ?>"
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                resultsDiv.html("<div class=\\"notice notice-success\\"><p>✅ " + response.data + "</p></div>");
-                            } else {
-                                resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ Error: " + response.data + "</p></div>");
-                            }
-                        },
-                        error: function() {
-                            resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ Error de conexión al limpiar cache</p></div>");
-                        },
-                        complete: function() {
-                            btn.prop("disabled", false).text("🗑️ Limpiar Cache");
-                        }
-                    });
-                });
-                
-                // Botón para estadísticas de cache
-                $("#get-cache-stats-btn").click(function() {
-                    var btn = $(this);
-                    var resultsDiv = $("#cache-results");
-                    
-                    btn.prop("disabled", true).text("Obteniendo...");
-                    resultsDiv.html("<div class=\\"spinner is-active\\" style=\\"float: none; margin: 10px 0;\\"></div>");
-                    
-                    $.ajax({
-                        url: ajaxurl,
-                        type: "POST",
-                        data: {
-                            action: "get_cache_stats",
-                            nonce: "<?php echo wp_create_nonce(\'cda_admin_nonce\'); ?>"
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                resultsDiv.html(response.data);
-                            } else {
-                                resultsDiv.html("<div class=\\"notice notice-error\\"><p>Error al obtener estadísticas: " + response.data + "</p></div>");
-                            }
-                        },
-                        error: function() {
-                            resultsDiv.html("<div class=\\"notice notice-error\\"><p>Error de conexión al obtener estadísticas</p></div>");
-                        },
-                        complete: function() {
-                            btn.prop("disabled", false).text("Ver Estadísticas");
-                        }
                     });
                 });
                 
@@ -1195,7 +1175,7 @@ class CosasAmazonAdmin {
     public function cache_stats_callback() {
         echo '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0;">';
         echo '<button type="button" id="get-cache-stats-btn" class="button button-secondary">Ver Estadísticas de Cache</button>';
-        echo '<div id="cache-results" style="margin-top: 10px;"></div>';
+        echo '<div id="cache-results" style="margin-top: 10px; display: block; visibility: visible; opacity: 1; min-height: 20px;"></div>';
         echo '</div>';
         echo '<p class="description">Obtén información detallada sobre el estado actual del cache de productos.</p>';
     }
@@ -1368,9 +1348,10 @@ class CosasAmazonAdmin {
     
     public function clear_cache_callback() {
         echo '<div id="cosas-amazon-cache-container">';
-        echo '<button type="button" id="clear-all-cache-btn" class="button button-secondary">Limpiar Todo el Cache</button>';
-        echo '<button type="button" id="get-cache-stats-btn" class="button button-secondary" style="margin-left: 10px;">Ver Estadísticas</button>';
-        echo '<div id="cache-results" style="margin-top: 15px;"></div>';
+        echo '<button type="button" id="clear-cache-btn" class="button button-secondary">🗑️ Limpiar Todo el Cache</button>';
+        echo '<button type="button" id="get-cache-stats-btn" class="button button-secondary" style="margin-left: 10px;">📊 Ver Estadísticas</button>';
+        echo '<button type="button" id="force-update-btn" class="button button-primary" style="margin-left: 10px;">🔄 Forzar Actualización</button>';
+        echo '<div id="cache-action-results" style="margin-top: 15px;"></div>';
         echo '</div>';
     }
     
@@ -1993,9 +1974,6 @@ class CosasAmazonAdmin {
                     body: JSON.stringify({ url: url })
                 })
                 .then(response => {
-                    console.log("Response status:", response.status);
-                    console.log("Response headers:", response.headers);
-                    
                     if (!response.ok) {
                         return response.text().then(text => {
                             throw new Error("HTTP " + response.status + ": " + text);
@@ -2022,23 +2000,31 @@ class CosasAmazonAdmin {
     
     // Manejador AJAX para obtener estadísticas de cache
     public function ajax_get_cache_stats() {
-        if (!wp_verify_nonce($_POST['nonce'], 'cda_admin_nonce')) {
-            wp_die('Acceso denegado');
+        error_log('[COSAS_AMAZON_DEBUG] ajax_get_cache_stats llamado');
+        
+        if (!wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
+            error_log('[COSAS_AMAZON_DEBUG] Nonce inválido');
+            wp_send_json_error('Acceso denegado');
+            return;
         }
         
         if (!current_user_can('manage_options')) {
-            wp_die('Permisos insuficientes');
+            error_log('[COSAS_AMAZON_DEBUG] Permisos insuficientes');
+            wp_send_json_error('Permisos insuficientes');
+            return;
         }
         
         global $wpdb;
         
         // Obtener estadísticas reales del cache
-        $transient_prefix = '_transient_cda_product_';
+        $transient_prefix = '_transient_cosas_amazon_product_';
         $cache_count = $wpdb->get_var($wpdb->prepare("
             SELECT COUNT(*) 
             FROM {$wpdb->options} 
             WHERE option_name LIKE %s
         ", $transient_prefix . '%'));
+        
+        error_log('[COSAS_AMAZON_DEBUG] Cache count: ' . $cache_count);
         
         $cache_size = $wpdb->get_var($wpdb->prepare("
             SELECT SUM(LENGTH(option_value)) 
@@ -2053,7 +2039,7 @@ class CosasAmazonAdmin {
             SELECT COUNT(*) 
             FROM {$wpdb->options} 
             WHERE option_name LIKE %s
-        ", '_transient_timeout_cda_product_%'));
+        ", '_transient_timeout_cosas_amazon_product_%'));
         
         $html = '<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">';
         $html .= '<div class="stat-card" style="background: #fff; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">';
@@ -2074,17 +2060,50 @@ class CosasAmazonAdmin {
         $html .= '</div>';
         $html .= '</div>';
         
+        error_log('[COSAS_AMAZON_DEBUG] Enviando respuesta exitosa');
         wp_send_json_success($html);
+    }
+    
+    // Función para ocultar footer de WordPress en páginas del plugin
+    public function hide_wordpress_footer() {
+        $screen = get_current_screen();
+        
+        // Verificar si estamos en páginas del plugin
+        if ($screen && (strpos($screen->id, 'cosas-amazon') !== false || 
+                       (isset($_GET['page']) && strpos($_GET['page'], 'cosas-amazon') !== false))) {
+            
+            // Ocultar footer de WordPress
+            add_filter('admin_footer_text', '__return_empty_string');
+            add_filter('update_footer', '__return_empty_string');
+            
+            // Añadir CSS para ocultar cualquier resto del footer
+            add_action('admin_head', function() {
+                echo '<style>
+                    #wpfooter, 
+                    .wrap + #wpfooter,
+                    #footer-thankyou,
+                    #footer-upgrade {
+                        display: none !important;
+                    }
+                    
+                    .wrap {
+                        margin-bottom: 0 !important;
+                    }
+                </style>';
+            });
+        }
     }
     
     // Manejador AJAX para limpiar cache
     public function ajax_clear_cache() {
-        if (!wp_verify_nonce($_POST['nonce'], 'cda_admin_nonce')) {
-            wp_die('Acceso denegado');
+        if (!wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
+            wp_send_json_error('Acceso denegado');
+            return;
         }
         
         if (!current_user_can('manage_options')) {
-            wp_die('Permisos insuficientes');
+            wp_send_json_error('Permisos insuficientes');
+            return;
         }
         
         global $wpdb;
@@ -2094,7 +2113,7 @@ class CosasAmazonAdmin {
             DELETE FROM {$wpdb->options} 
             WHERE option_name LIKE %s 
             OR option_name LIKE %s
-        ", '_transient_cda_product_%', '_transient_timeout_cda_product_%'));
+        ", '_transient_cosas_amazon_product_%', '_transient_timeout_cosas_amazon_product_%'));
         
         if ($deleted !== false) {
             wp_send_json_success('Cache limpiado exitosamente. Se eliminaron ' . $deleted . ' entradas.');
