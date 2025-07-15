@@ -164,12 +164,6 @@ define('COSAS_AMAZON_DEBUG', true);
 - **Temas**: Compatible con cualquier tema
 - **Plugins**: Compatible con plugins de caché principales
 
-## Soporte
-
-Para soporte técnico:
-- Website: [entreunosyceros.net](https://entreunosyceros.net)
-- Email: admin@entreunosyceros.net
-
 ## Licencia
 
 MIT License
