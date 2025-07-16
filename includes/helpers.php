@@ -131,6 +131,10 @@ class CosasAmazonHelpers {
         // Log del inicio
         self::log_debug('Iniciando get_product_data', $url);
         
+        // FORZAR REFRESH TEMPORALMENTE PARA DEBUGGING
+        $force_refresh = true;
+        self::log_debug('FORZANDO REFRESH PARA DEBUGGING');
+        
         if (!self::is_amazon_url($url)) {
             self::log_debug('URL no es de Amazon', $url);
             return false;
@@ -589,6 +593,7 @@ class CosasAmazonHelpers {
                     
                     if (!empty($price_text)) {
                         $product_data['price'] = $price_text;
+                        self::log_debug("✅ PRECIO FINAL ASIGNADO: " . $price_text);
                         self::log_debug("Precio encontrado con patrón $i: " . $price_text);
                         break;
                     }
@@ -1038,6 +1043,7 @@ class CosasAmazonHelpers {
                             $price_text = $price_text . '€';
                         }
                         $product_data['price'] = $price_text;
+                        self::log_debug("✅ PRECIO FALLBACK ASIGNADO: " . $price_text);
                         self::log_debug("Precio extraído con patrón fallback $i: " . $price_text);
                         break;
                     }
