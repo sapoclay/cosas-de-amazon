@@ -1,120 +1,91 @@
-# Cosas de Amazon - WordPress Plugin
+# Cosas de Amazon - Un plugin para WordPress
 
-Plugin de WordPress para mostrar productos de Amazon usando enlaces cortos con diferentes estilos de tarjetas. Incluye soporte completo para Gutenberg con múltiples estilos de visualización.
+Plugin para mostrar productos de Amazon con extracción avanzada de datos y múltiples estilos de visualización. Optimizado para Amazon España con soporte completo para formato europeo de precios.
 
-## Descripción
+## 🚀 Características Principales
 
-**Cosas de Amazon** es un plugin avanzado para WordPress que permite mostrar productos de Amazon de manera elegante y profesional. El plugin ofrece múltiples estilos de visualización, desde tarjetas individuales hasta carousels y tablas comparativas.
-
-## Características Principales
+### 📊 Extracción Avanzada de Datos
+- **Patrones específicos** para Amazon España con estructura HTML optimizada
+- **Resolución inteligente** de URLs cortas (amzn.to, a.co)
+- **Formato europeo** de precios (1.234,56€) con detección automática
+- **Extracción de descuentos** con precios originales y porcentajes
+- **Imágenes de alta calidad** con fallbacks automáticos
+- **Caché inteligente** para optimizar rendimiento
 
 ### 🎨 Estilos de Visualización
-- **Compacto**: Tarjetas pequeñas y minimalistas
-- **Destacado**: Tarjetas grandes con posicionamiento absoluto
-- **Muestra mínima**: Diseño reducido con elementos esenciales
-- **Carousel**: Desplazamiento horizontal con múltiples productos
-- **Tabla comparativa**: Comparación lado a lado de múltiples productos
+- **Tarjeta compacta** - Diseño minimalista para barras laterales
+- **Tarjeta destacada** - Formato grande para contenido principal
+- **Muestra mínima** - Vista reducida con elementos esenciales
+- **Carousel responsive** - Desplazamiento horizontal con múltiples productos
+- **Tabla comparativa** - Comparación lado a lado con 6 columnas
 
-### 📱 Responsive Design
-- Totalmente adaptativo a dispositivos móviles
-- Optimizado para tablets y desktop
-- Scroll horizontal en carousels y tablas
+### 🔧 Integración WordPress
+- **Bloque Gutenberg** nativo con editor visual
+- **Shortcode tradicional** compatible con cualquier tema
+- **Responsive design** adaptado a todos los dispositivos
+- **Configuración avanzada** desde el panel de administración
 
-### 🔧 Integración con Gutenberg
-- Bloque nativo de WordPress
-- Editor visual en tiempo real
-- Sincronización perfecta entre editor y frontend
-
-### 🛒 Características del Producto
-- **Extracción automática** de datos de Amazon España
-- **Patrones específicos** para estructura HTML de Amazon
-- **Formato europeo** de precios (1.234,56€)
-- **Resolución inteligente** de URLs cortas
-- **Soporte para múltiples productos**
-- **Extracción de descuentos** con precios originales
-- **Mostrar/ocultar elementos específicos**:
-  - Precios en formato europeo
-  - Descuentos y precios originales
-  - Descripciones del producto
-  - Botones de acción personalizables
-  - Valoraciones y reseñas
-- **Debugging avanzado** con logs detallados
-
-## Versión Actual
-
-**Versión 2.2.0** - Extracción avanzada para Amazon España con patrones específicos
-
-### ✨ Mejoras Implementadas:
-- **Patrones específicos** para Amazon España (div.a-section.a-spacing-micro)
-- **Extracción mejorada** de precios en formato europeo (XX,XX€)
-- **Resolución optimizada** de URLs cortas (amzn.to, a.co)
-- **Patrones prioritarios** para span.a-price.aok-align-center > span.a-offscreen
-- **Mejor extracción** de descuentos y precios originales
+### 🛡️ Características Técnicas
 - **Logging detallado** para diagnóstico y debugging
-- **Caché inteligente** con sistema de refresco
-- **Fallbacks específicos** para euros y formato europeo
-- **Soporte completo** para carousel con elementos centrados
-- **Tabla comparativa** con 6 columnas incluida imagen
+- **Manejo de errores** robusto con fallbacks
+- **Optimización de rendimiento** con sistema de caché
+- **Compatibilidad** con múltiples versiones de WordPress
 
-## Instalación
+## 📦 Instalación
 
-1. Sube el plugin a la carpeta `/wp-content/plugins/cosas-de-amazon`
-2. Activa el plugin desde el panel de administración de WordPress
-3. Busca el bloque "Cosas de Amazon" en el editor de Gutenberg
+1. Descarga el plugin y súbelo a `/wp-content/plugins/cosas-de-amazon/`
+2. Activa el plugin desde el panel de administración
+3. Configura las opciones en **Ajustes → Cosas de Amazon**
 
-## Uso
+## 🎯 Uso Básico
 
-### Configuración Básica
-1. Añade el bloque "Cosas de Amazon" en tu entrada o página
-2. Introduce la URL de Amazon del producto
-3. Selecciona el estilo de visualización deseado
-4. Configura las opciones de visualización
+### Bloque Gutenberg
+1. Añade el bloque **"Cosas de Amazon"** en el editor
+2. Introduce la URL del producto de Amazon
+3. Selecciona el estilo de visualización
+4. Configura las opciones de mostrado
+
+### Shortcode
+```php
+[cosas-amazon url="https://amzn.to/xxxxxxx" style="card"]
+```
 
 ### Múltiples Productos
-Para mostrar múltiples productos (carousel o tabla):
-1. Selecciona el estilo "Carousel" o "Tabla comparativa"
-2. Añade URLs adicionales en el campo "URLs adicionales"
-3. Haz clic en "Obtener Múltiples Productos"
+```php
+[cosas-amazon url="https://amzn.to/xxxxxxx,https://amzn.to/yyyyyyy" style="carousel"]
+```
 
-### Estilos Disponibles
+## 🎨 Estilos Disponibles
 
-#### Compacto
-- Tarjeta pequeña y minimalista
-- Ideal para barras laterales
-- Elementos centrados
+### `compacto`
+Tarjeta pequeña y minimalista, ideal para barras laterales o contenido secundario.
 
-#### Destacado
-- Tarjeta grande con imagen prominente
-- Posicionamiento absoluto de elementos
-- Ideal para contenido principal
+### `destacado`
+Tarjeta grande con imagen prominente, perfecta para contenido principal.
 
-#### Muestra Mínima
-- Diseño reducido con elementos esenciales
-- Perfecto para listas de productos
-- Ordenación específica de elementos
+### `muestra-minima`
+Vista reducida con elementos esenciales, útil para listas de productos.
 
-#### Carousel
-- Scroll horizontal con múltiples productos
-- Elementos centrados en cada tarjeta
-- Soporte para productos individuales o múltiples
-- Efectos hover y transiciones suaves
+### `carousel`
+Desplazamiento horizontal con múltiples productos, con navegación por flechas.
 
-#### Tabla Comparativa
-- Comparación lado a lado de múltiples productos
-- Columnas para imagen, título, valoración, precio, descuento y acción
-- Responsive con scroll horizontal en móviles
-- Placeholders para productos sin datos
+### `table`
+Tabla comparativa con columnas para imagen, título, valoración, precio, descuento y acción.
 
-## Configuración Avanzada
+## ⚙️ Configuración
+
+### Opciones Generales
+- **Duración de caché**: Tiempo de almacenamiento temporal (minutos)
+- **Timeout de scraping**: Límite de tiempo para extracción de datos
+- **Longitud de descripción**: Caracteres máximos en descripciones
+- **Fuente de datos**: Modo real o datos simulados para testing
 
 ### Opciones de Visualización
-- **Mostrar precio**: Activa/desactiva la visualización del precio
-- **Mostrar descuento**: Muestra información de descuentos
-- **Mostrar descripción**: Incluye descripción del producto
+- **Mostrar precio**: Activar/desactivar precios
+- **Mostrar descuento**: Mostrar información de descuentos
+- **Mostrar descripción**: Incluir descripción del producto
 - **Mostrar botón**: Botón de enlace a Amazon
 - **Texto del botón**: Personalizable (por defecto: "Ver en Amazon")
-
-### Tamaños de Bloque
 - **Pequeño**: Para barras laterales o espacios reducidos
 - **Mediano**: Tamaño estándar recomendado
 - **Grande**: Para contenido principal destacado
@@ -176,37 +147,91 @@ Puedes personalizar los estilos añadiendo CSS adicional en tu tema:
 ## Soporte
 
 Para soporte técnico o reportar bugs:
-- Repositorio: [GitHub](https://github.com/sapoclay/cosas-de-amazon)
-- Web: [entreunosyceros.com](https://entreunosyceros.com)
+### Configuración Avanzada
+- **Debugging**: Activar logs detallados para diagnóstico
+- **Caché personalizado**: Configurar tiempo de vida del caché
+- **Fallbacks de imagen**: Imágenes por defecto por categoría
 
-## Changelog
+## 🌐 Compatibilidad
 
-### 2.2.0 (2025-07-16)
-- ✅ Implementada tabla comparativa completa
-- ✅ Soporte para múltiples productos en tabla
-- ✅ Elementos centrados en carousel
-- ✅ Sincronización completa entre editor y frontend
-- ✅ Mejoras en responsive design
+### Sitios Amazon Soportados
+- **Amazon España** (.es) - Optimizado
+- **Amazon Francia** (.fr)
+- **Amazon Alemania** (.de)
+- **Amazon Reino Unido** (.co.uk)
+- **Amazon Italia** (.it)
+- **Amazon Estados Unidos** (.com)
 
-### 2.1.0 (2025-07-15)
-- ✅ Carousel completamente funcional
-- ✅ Sincronización de estilos mejorada
-- ✅ Correcciones en lógica de renderizado
+### URLs Soportadas
+- URLs completas de Amazon
+- URLs cortas (amzn.to, a.co)
+- Enlaces con parámetros de afiliado
+- Enlaces directos a productos
 
-### 2.0.0 (2025-07-14)
-- ✅ Refactorización completa del código
-- ✅ Soporte para Gutenberg
-- ✅ Múltiples estilos de visualización
-- ✅ Diseño responsive
+### Formatos de Precio
+- **Formato europeo**: 1.234,56€
+- **Formato estadounidense**: $1,234.56
+- **Formato británico**: £1,234.56
+- **Detección automática** según el dominio
 
-## Licencia
+## 🔧 Personalización
+
+### CSS Personalizado
+El plugin incluye estilos propios que se pueden personalizar:
+
+```css
+.cosas-amazon-card {
+    /* Personalizar tarjetas */
+}
+
+.cosas-amazon-carousel {
+    /* Personalizar carousel */
+}
+
+.cosas-amazon-table {
+    /* Personalizar tabla */
+}
+```
+
+### Hooks Disponibles
+```php
+// Filtrar datos del producto
+add_filter('cosas_amazon_product_data', 'mi_funcion_personalizada');
+
+// Personalizar HTML de salida
+add_filter('cosas_amazon_output_html', 'mi_html_personalizado');
+```
+
+## 📝 Requisitos
+
+- **WordPress**: 5.0 o superior
+- **PHP**: 7.4 o superior
+- **cURL**: Activado en el servidor
+- **Memoria**: Mínimo 64MB recomendado
+
+## 🆘 Soporte
+
+### Resolución de Problemas
+- **Precios no aparecen**: Verificar configuración de caché y debugging
+- **Imágenes no cargan**: Comprobar conectividad y fallbacks
+- **Errores de formato**: Revisar configuración regional
+
+### Debugging
+Activar el modo debug en la configuración del plugin para obtener información detallada sobre el procesamiento.
+
+## 📄 Licencia
 
 Este plugin está licenciado bajo GPL v2 o posterior.
 
-## Créditos
+## 👨‍💻 Desarrollo
 
-Desarrollado por [entreunosyceros](https://entreunosyceros.com)
+Desarrollado por **entreunosyceros.net** con enfoque en:
+- Extracción optimizada para Amazon España
+- Soporte completo para formato europeo
+- Rendimiento y compatibilidad
 
 ---
 
-*Este plugin no está afiliado con Amazon. Amazon es una marca comercial de Amazon.com, Inc.*
+Para más información y soporte técnico, visita [entreunosyceros.com](https://entreunosyceros.net).
+
+*Este plugin no está afiliado con Amazon. Este plugin solo se ha realizado a modo de prueba sin pretensiones ni garantías de ningún tipo*
