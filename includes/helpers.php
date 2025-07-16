@@ -469,6 +469,32 @@ class CosasAmazonHelpers {
             'reviewCount' => ''
         );
         
+        // Intentar extraer datos de JSON embebido primero
+        $json_data = self::extract_json_data($html);
+        if (!empty($json_data)) {
+            if (!empty($json_data['title'])) {
+                $product_data['title'] = $json_data['title'];
+            }
+            if (!empty($json_data['price'])) {
+                $product_data['price'] = $json_data['price'];
+            }
+            if (!empty($json_data['originalPrice'])) {
+                $product_data['originalPrice'] = $json_data['originalPrice'];
+            }
+            if (!empty($json_data['discount'])) {
+                $product_data['discount'] = $json_data['discount'];
+            }
+            if (!empty($json_data['image'])) {
+                $product_data['image'] = $json_data['image'];
+            }
+            if (!empty($json_data['rating'])) {
+                $product_data['rating'] = $json_data['rating'];
+            }
+            if (!empty($json_data['reviewCount'])) {
+                $product_data['reviewCount'] = $json_data['reviewCount'];
+            }
+        }
+        
         // Extraer título
         $title_patterns = [
             '/<span[^>]*id="productTitle"[^>]*>([^<]+)<\/span>/i',
@@ -498,68 +524,117 @@ class CosasAmazonHelpers {
             }
         }
         
-        // Extraer precio actual
+        // Extraer precio actual - Patrones mejorados y más robustos
         $price_patterns = [
+            // Nuevos patrones más específicos para precios actuales
             '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*id="priceblock_[^"]*price"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*id="priceblock_dealprice"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price a-text-price a-size-medium a-color-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            // Patrones específicos para diferentes tipos de precio
+            '/<span[^>]*class="[^"]*apexPriceToPay[^"]*"[^>]*>.*?<span[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price-range[^"]*"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price a-text-price a-size-medium a-color-price[^"]*"[^>]*>([^<]+)<\/span>/i',
+            // Patrones para precios con decimales
+            '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span><span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([^<]+)<\/span>/i',
+            // Patrones más genéricos como fallback
+            '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*>([^<]+)<\/span>/i',
-            '/<span[^>]*id="priceblock_[^"]*price"[^>]*>([^<]+)<\/span>/i'
+            // Patrones para precios en elementos con id específico
+            '/<span[^>]*id="price_inside_buybox"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*id="a-autoid-[^"]*-announce"[^>]*>([^<]+)<\/span>/i'
         ];
         
-        foreach ($price_patterns as $pattern) {
+        foreach ($price_patterns as $i => $pattern) {
             if (preg_match($pattern, $html, $matches)) {
-                $price_text = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
-                if (!empty($price_text) && preg_match('/[0-9]/', $price_text)) {
+                // Para patrones con dos grupos (precio completo + decimales)
+                if (count($matches) > 2 && strpos($pattern, 'a-price-whole') !== false) {
+                    $price_text = trim($matches[1]) . ',' . trim($matches[2]);
+                } else {
+                    $price_text = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
+                }
+                
+                if (!empty($price_text) && (preg_match('/[0-9]/', $price_text) || preg_match('/[€$£¥₹₽]/', $price_text))) {
                     $product_data['price'] = $price_text;
+                    self::log_debug("Precio encontrado con patrón $i: " . $price_text);
                     break;
                 }
             }
         }
         
-        // Extraer descuento directo de Amazon (nuevo método mejorado)
+        // Extraer descuento directo de Amazon (patrones mejorados)
         $discount_patterns = [
-            // Descuento directo con las clases específicas mencionadas
+            // Patrones específicos para descuentos directos
             '/<span[^>]*class="[^"]*savingPriceOverride[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
             '/<span[^>]*class="[^"]*savingsPercentage[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
             '/<span[^>]*class="[^"]*a-size-large a-color-price[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
             '/<span[^>]*class="[^"]*reinventPriceSavingsPercentageMargin[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
+            // Nuevos patrones para descuentos más específicos
+            '/<span[^>]*class="[^"]*a-letter-space[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*class="[^"]*a-size-base a-color-price[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*class="[^"]*a-color-price[^"]*"[^>]*>.*?-([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*class="[^"]*a-color-success[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
+            // Patrones para texto en español
+            '/<span[^>]*>.*?descuento[^0-9]*([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*>.*?ahorra[^0-9]*([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*>.*?ahorras[^0-9]*([0-9]+)%[^<]*<\/span>/i',
             // Patrones adicionales para descuentos
             '/<span[^>]*>\s*-([0-9]+)%\s*<\/span>/i',
-            '/descuento\s*([0-9]+)%/i',
-            '/ahorra\s*([0-9]+)%/i'
+            '/<span[^>]*>\s*\(([0-9]+)%\s*descuento\)\s*<\/span>/i',
+            // Patrones más genéricos
+            '/([0-9]+)%\s*de\s*descuento/i',
+            '/descuento\s*:?\s*([0-9]+)%/i'
         ];
         
         $found_discount = false;
-        foreach ($discount_patterns as $pattern) {
+        foreach ($discount_patterns as $i => $pattern) {
             if (preg_match($pattern, $html, $matches)) {
                 $discount_value = intval($matches[1]);
                 if ($discount_value >= 1 && $discount_value <= 90) {
                     $product_data['discount'] = $discount_value;
                     $found_discount = true;
-                    self::log_debug("Descuento directo encontrado: {$discount_value}%");
+                    self::log_debug("Descuento directo encontrado con patrón $i: {$discount_value}%");
                     break;
                 }
             }
         }
 
-        // Extraer precio original (tachado) - Mejorado con clases específicas
+        // Extraer precio original (tachado) - Patrones mejorados y más robustos
         $original_price_patterns = [
-            // Patrón específico para "a-price a-text-price" con "a-offscreen" dentro
+            // Patrones específicos para precios originales con clases exactas
             '/<span[^>]*class="[^"]*a-price a-text-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>\s*([^<]+)\s*<\/span>/i',
-            // Patrones existentes
+            '/<span[^>]*class="[^"]*a-price-was[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-text-strike[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price-was[^"]*"[^>]*>.*?<span[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-text-strike[^"]*"[^>]*>([^<]+)<\/span>/i',
-            '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>\s*([^<]*)\s*<\/span>[^<]*<span[^>]*class="[^"]*a-text-strike[^"]*"/i'
+            // Nuevos patrones más específicos para precios originales
+            '/<span[^>]*class="[^"]*a-price a-text-price a-size-base[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price a-text-price a-size-small[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price a-text-price a-size-medium[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            // Patrones para precios tachados sin a-offscreen
+            '/<span[^>]*class="[^"]*a-text-strike[^"]*"[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price-was[^"]*"[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
+            // Patrones más genéricos para precios originales
+            '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>\s*([^<]*)\s*<\/span>[^<]*<span[^>]*class="[^"]*a-text-strike[^"]*"/i',
+            '/<span[^>]*text-decoration[^>]*line-through[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*style="[^"]*text-decoration[^"]*line-through[^"]*"[^>]*>([^<]+)<\/span>/i',
+            // Patrones para IDs específicos de precio original
+            '/<span[^>]*id="priceblock_saleprice"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*id="listPrice"[^>]*>([^<]+)<\/span>/i',
+            '/<span[^>]*id="was-price"[^>]*>([^<]+)<\/span>/i'
         ];
         
         $found_original_price = false;
-        foreach ($original_price_patterns as $pattern) {
+        foreach ($original_price_patterns as $i => $pattern) {
             if (preg_match($pattern, $html, $matches)) {
                 $original_price = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
-                if (!empty($original_price) && preg_match('/[0-9]/', $original_price)) {
+                if (!empty($original_price) && (preg_match('/[0-9]/', $original_price) || preg_match('/[€$£¥₹₽]/', $original_price))) {
                     $product_data['originalPrice'] = $original_price;
                     $found_original_price = true;
-                    self::log_debug("Precio original encontrado: " . $original_price);
+                    self::log_debug("Precio original encontrado con patrón $i: " . $original_price);
                     break;
                 }
             }
@@ -871,6 +946,33 @@ class CosasAmazonHelpers {
         
         // Si no hay precio, usar un precio por defecto
         if (empty($product_data['price'])) {
+            // Intento adicional con patrones más amplios antes de usar fallback
+            $fallback_price_patterns = [
+                // Buscar cualquier precio que se vea como precio
+                '/[€$£¥₹₽]\s*([0-9]+(?:[.,][0-9]+)?)/i',
+                '/([0-9]+(?:[.,][0-9]+)?)\s*[€$£¥₹₽]/i',
+                // Buscar precios en formato específico
+                '/precio[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i',
+                '/price[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i',
+                // Buscar cualquier número que parezca un precio
+                '/([0-9]+,[0-9]{2})\s*€/i',
+                '/€\s*([0-9]+,[0-9]{2})/i'
+            ];
+            
+            foreach ($fallback_price_patterns as $pattern) {
+                if (preg_match($pattern, $html, $matches)) {
+                    $price_text = trim($matches[1]);
+                    if (!empty($price_text) && preg_match('/[0-9]/', $price_text)) {
+                        $product_data['price'] = $price_text;
+                        self::log_debug("Precio extraído con patrón fallback: " . $price_text);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Si aún no hay precio, usar texto por defecto
+        if (empty($product_data['price'])) {
             $product_data['price'] = 'Ver precio en Amazon';
             self::log_debug("No se encontró precio, usando precio por defecto");
         }
@@ -1086,18 +1188,99 @@ class CosasAmazonHelpers {
             return 0;
         }
         
-        // Remover símbolos y espacios
-        $numeric = preg_replace('/[^0-9,.]/', '', $price_string);
+        // Limpiar el string manteniendo solo números, comas y puntos
+        $clean_price = preg_replace('/[^0-9,.]/', '', $price_string);
         
-        // Convertir formato europeo a decimal
-        if (strpos($numeric, ',') !== false) {
-            $parts = explode(',', $numeric);
-            if (count($parts) == 2 && strlen($parts[1]) == 2) {
-                $numeric = str_replace(',', '.', $numeric);
+        if (empty($clean_price)) {
+            return 0;
+        }
+        
+        // Manejar diferentes formatos de precio
+        if (strpos($clean_price, ',') !== false && strpos($clean_price, '.') !== false) {
+            // Formato con separador de miles y decimales: 1.234,56 o 1,234.56
+            $comma_pos = strrpos($clean_price, ',');
+            $dot_pos = strrpos($clean_price, '.');
+            
+            if ($comma_pos > $dot_pos) {
+                // Formato europeo: 1.234,56
+                $clean_price = str_replace('.', '', $clean_price);
+                $clean_price = str_replace(',', '.', $clean_price);
+            } else {
+                // Formato americano: 1,234.56
+                $clean_price = str_replace(',', '', $clean_price);
+            }
+        } elseif (strpos($clean_price, ',') !== false) {
+            // Solo comas
+            $parts = explode(',', $clean_price);
+            if (count($parts) == 2 && strlen($parts[1]) <= 2) {
+                // Formato decimal europeo: 12,34
+                $clean_price = str_replace(',', '.', $clean_price);
+            } else {
+                // Separador de miles: 1,234
+                $clean_price = str_replace(',', '', $clean_price);
             }
         }
         
-        return floatval($numeric);
+        $numeric_value = floatval($clean_price);
+        
+        // Validar que sea un precio razonable
+        if ($numeric_value > 0 && $numeric_value < 999999) {
+            return $numeric_value;
+        }
+        
+        return 0;
+    }
+    
+    /**
+     * Extraer datos de JSON embebido en las páginas de Amazon
+     */
+    public static function extract_json_data($html) {
+        $json_data = array();
+        
+        // Buscar datos JSON embebidos en scripts
+        $json_patterns = [
+            // Patrón para datos de producto embebidos
+            '/window\.P\s*=\s*window\.P\s*\|\|\s*\{\};\s*P\.when\(\'A\'\)\.execute\(function\(A\)\s*\{\s*return\s*A\.declarative\([^}]+\}\s*,\s*"product-facts"\s*,\s*({[^}]+})\s*\)\s*;\s*\}\s*\);/s',
+            // Patrón para datos de precios en JSON
+            '/priceblock_dealprice[^{]+({[^}]+})/s',
+            // Patrón para datos estructurados JSON-LD
+            '/<script type="application\/ld\+json"[^>]*>([^<]+)<\/script>/i',
+            // Patrón para datos de configuración del producto
+            '/window\.ue_pdp\s*=\s*window\.ue_pdp\s*\|\|\s*\{\};\s*ue_pdp\.asin\s*=\s*"[^"]+"\s*;\s*ue_pdp\.productData\s*=\s*({[^}]+})\s*;/s'
+        ];
+        
+        foreach ($json_patterns as $pattern) {
+            if (preg_match($pattern, $html, $matches)) {
+                $json_string = $matches[1];
+                $decoded = json_decode($json_string, true);
+                
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    // Extraer datos relevantes del JSON
+                    if (isset($decoded['name'])) {
+                        $json_data['title'] = $decoded['name'];
+                    }
+                    if (isset($decoded['offers']['price'])) {
+                        $json_data['price'] = $decoded['offers']['price'];
+                    }
+                    if (isset($decoded['offers']['priceCurrency'])) {
+                        $json_data['currency'] = $decoded['offers']['priceCurrency'];
+                    }
+                    if (isset($decoded['aggregateRating']['ratingValue'])) {
+                        $json_data['rating'] = $decoded['aggregateRating']['ratingValue'];
+                    }
+                    if (isset($decoded['aggregateRating']['reviewCount'])) {
+                        $json_data['reviewCount'] = $decoded['aggregateRating']['reviewCount'];
+                    }
+                    if (isset($decoded['image'])) {
+                        $json_data['image'] = is_array($decoded['image']) ? $decoded['image'][0] : $decoded['image'];
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        return $json_data;
     }
     
     /**
