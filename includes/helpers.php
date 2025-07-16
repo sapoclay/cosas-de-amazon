@@ -131,10 +131,6 @@ class CosasAmazonHelpers {
         // Log del inicio
         self::log_debug('Iniciando get_product_data', $url);
         
-        // FORZAR REFRESH TEMPORALMENTE PARA DEBUGGING
-        $force_refresh = true;
-        self::log_debug('FORZANDO REFRESH PARA DEBUGGING');
-        
         if (!self::is_amazon_url($url)) {
             self::log_debug('URL no es de Amazon', $url);
             return false;

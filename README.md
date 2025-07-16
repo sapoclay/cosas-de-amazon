@@ -26,18 +26,35 @@ Plugin de WordPress para mostrar productos de Amazon usando enlaces cortos con d
 - Sincronización perfecta entre editor y frontend
 
 ### 🛒 Características del Producto
-- Extracción automática de datos de Amazon
-- Soporte para múltiples productos
-- Mostrar/ocultar elementos específicos:
-  - Precios
-  - Descuentos
-  - Descripciones
-  - Botones de acción
+- **Extracción automática** de datos de Amazon España
+- **Patrones específicos** para estructura HTML de Amazon
+- **Formato europeo** de precios (1.234,56€)
+- **Resolución inteligente** de URLs cortas
+- **Soporte para múltiples productos**
+- **Extracción de descuentos** con precios originales
+- **Mostrar/ocultar elementos específicos**:
+  - Precios en formato europeo
+  - Descuentos y precios originales
+  - Descripciones del producto
+  - Botones de acción personalizables
   - Valoraciones y reseñas
+- **Debugging avanzado** con logs detallados
 
 ## Versión Actual
 
-**Versión 2.2.0** - Incluye soporte completo para carousel con elementos centrados y tabla comparativa implementada
+**Versión 2.2.0** - Extracción avanzada para Amazon España con patrones específicos
+
+### ✨ Mejoras Implementadas:
+- **Patrones específicos** para Amazon España (div.a-section.a-spacing-micro)
+- **Extracción mejorada** de precios en formato europeo (XX,XX€)
+- **Resolución optimizada** de URLs cortas (amzn.to, a.co)
+- **Patrones prioritarios** para span.a-price.aok-align-center > span.a-offscreen
+- **Mejor extracción** de descuentos y precios originales
+- **Logging detallado** para diagnóstico y debugging
+- **Caché inteligente** con sistema de refresco
+- **Fallbacks específicos** para euros y formato europeo
+- **Soporte completo** para carousel con elementos centrados
+- **Tabla comparativa** con 6 columnas incluida imagen
 
 ## Instalación
 
