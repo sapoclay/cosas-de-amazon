@@ -232,6 +232,6 @@ Desarrollado por **entreunosyceros.net** con enfoque en:
 
 ---
 
-Para más información y soporte técnico, visita [entreunosyceros.com](https://entreunosyceros.net).
+Para más información y soporte técnico, visita [entreunosyceros.net](https://entreunosyceros.net).
 
 *Este plugin no está afiliado con Amazon. Este plugin solo se ha realizado a modo de prueba sin pretensiones ni garantías de ningún tipo*
