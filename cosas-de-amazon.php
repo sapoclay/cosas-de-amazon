@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Cosas de Amazon
  * Plugin URI: https://entreunosyceros.com
- * Description: Plugin para mostrar productos de Amazon usando enlaces cortos con diferentes estilos de tarjetas. Versión mejorada con extracción avanzada de imágenes y CSS forzado.
- * Version: 2.1.0
+ * Description: Plugin para mostrar productos de Amazon usando enlaces cortos con diferentes estilos de tarjetas. Versión mejorada con extracción avanzada de imágenes y CSS forzado. Incluye soporte completo para carousel con elementos centrados.
+ * Version: 2.2.0
  * Author: entreunosyceros
  * License: GPL v2 or later
  * Text Domain: cosas-de-amazon
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Definir constantes del plugin
-define('COSAS_AMAZON_VERSION', '2.1.0');
+define('COSAS_AMAZON_VERSION', '2.2.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 

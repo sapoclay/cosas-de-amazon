@@ -325,107 +325,226 @@
 
 /* Estilo mínimal específico */
 .cosas-amazon-minimal {
-    padding: 8px !important;
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    gap: 10px !important;
-    max-width: 280px !important;
-    min-height: 60px !important;
-    font-size: 12px !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    max-width: 280px;
+    min-height: 120px;
+    font-size: 12px;
+    overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
 }
 
+/* Título en la parte superior */
+.cosas-amazon-minimal .cosas-amazon-title {
+    font-size: 17px;
+    font-weight: bold;
+    margin: 0 0 10px 0;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #333;
+    order: 1;
+}
+
+/* Contenedor principal con imagen a la izquierda */
+.cosas-amazon-minimal .cosas-amazon-main-content {
+    display: flex;
+    gap: 10px;
+    flex: 1;
+    order: 2;
+}
+
+/* Imagen a la izquierda */
 .cosas-amazon-minimal .cosas-amazon-image {
-    width: 50px !important;
-    height: 50px !important;
-    flex-shrink: 0 !important;
-    overflow: hidden !important;
-}
-
-.cosas-amazon-minimal .cosas-amazon-image img {
-    width: 50px !important;
-    height: 50px !important;
-    object-fit: cover !important;
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    overflow: hidden;
     border-radius: 4px;
 }
 
-.cosas-amazon-minimal .cosas-amazon-content {
-    flex: 1 !important;
-    overflow: hidden !important;
+.cosas-amazon-minimal .cosas-amazon-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
 }
 
-.cosas-amazon-minimal .cosas-amazon-title {
-    font-size: 11px !important;
-    font-weight: bold !important;
-    margin-bottom: 2px !important;
-    line-height: 1.2 !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+/* Contenido a la derecha de la imagen */
+.cosas-amazon-minimal .cosas-amazon-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
 }
 
 .cosas-amazon-minimal .cosas-amazon-description {
-    display: none !important;
+    display: none;
 }
 
-.cosas-amazon-minimal .cosas-amazon-pricing {
-    display: flex !important;
-    align-items: center !important;
-    gap: 5px !important;
-    flex-wrap: wrap !important;
-    margin: 2px 0 !important;
-}
-
-.cosas-amazon-minimal .cosas-amazon-rating {
-    display: flex !important;
-    align-items: center !important;
-    gap: 2px !important;
-    font-size: 9px !important;
-    margin: 1px 0 !important;
-}
-
-.cosas-amazon-minimal .cosas-amazon-rating .cosas-amazon-stars {
-    display: flex !important;
-    gap: 1px !important;
-}
-
-.cosas-amazon-minimal .cosas-amazon-rating .cosas-amazon-star {
-    font-size: 10px !important;
-    width: 10px !important;
-    height: 10px !important;
-}
-
+/* Precio debajo del título - orden correcto */
 .cosas-amazon-minimal .cosas-amazon-price {
-    font-size: 12px !important;
-    color: #B12704 !important;
-    font-weight: bold !important;
+    font-size: 19px;
+    color: #B12704;
+    font-weight: bold;
+    margin: 0;
+    order: 1;
 }
 
-.cosas-amazon-minimal .cosas-amazon-original-price {
-    font-size: 10px !important;
-    color: #999 !important;
-    text-decoration: line-through !important;
+/* Línea de descuento y precio anterior - orden correcto */
+.cosas-amazon-minimal .cosas-amazon-pricing-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    order: 2;
 }
 
 .cosas-amazon-minimal .cosas-amazon-discount {
-    font-size: 10px !important;
-    padding: 1px 4px !important;
-    border-radius: 2px !important;
-    background: #d93025 !important;
-    color: white !important;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #d93025;
+    color: white;
+    font-weight: bold;
 }
 
+.cosas-amazon-minimal .cosas-amazon-original-price {
+    font-size: 12px;
+    color: #999;
+    text-decoration: line-through;
+}
+
+/* Etiqueta de oferta especial - orden correcto */
+.cosas-amazon-minimal .cosas-amazon-special-offer {
+    margin: 0;
+    order: 3;
+}
+
+.cosas-amazon-minimal .cosas-amazon-special-offer span {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: #e74c3c;
+    color: white;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Rating opcional - orden correcto */
+.cosas-amazon-minimal .cosas-amazon-rating {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 9px;
+    margin: 0;
+    order: 4;
+}
+
+.cosas-amazon-minimal .cosas-amazon-rating .cosas-amazon-stars {
+    display: flex;
+    gap: 1px;
+}
+
+.cosas-amazon-minimal .cosas-amazon-rating .cosas-amazon-star {
+    font-size: 10px;
+    width: 10px;
+    height: 10px;
+}
+
+/* Botón en la parte inferior - orden correcto */
 .cosas-amazon-minimal .cosas-amazon-btn {
-    font-size: 10px !important;
-    padding: 4px 8px !important;
-    margin-top: 2px !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
+    font-size: 11px;
+    padding: 8px 12px;
+    margin-top: auto;
+    width: 100%;
+    box-sizing: border-box;
+    order: 5;
+    border-radius: 4px;
+    min-height: 32px;
+}
+
+/* Ajustes para diferentes tamaños de bloque - estilo minimal */
+.cosas-amazon-minimal.cosas-amazon-size-small {
+    padding: 8px;
+    max-width: 240px;
+    min-height: 100px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-small .cosas-amazon-title {
+    font-size: 15px;
+    margin-bottom: 8px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-small .cosas-amazon-image {
+    width: 50px;
+    height: 50px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-small .cosas-amazon-price {
+    font-size: 17px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-small .cosas-amazon-btn {
+    font-size: 10px;
+    padding: 5px 10px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-large {
+    padding: 12px;
+    max-width: 320px;
+    min-height: 140px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-large .cosas-amazon-title {
+    font-size: 19px;
+    margin-bottom: 12px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-large .cosas-amazon-image {
+    width: 70px;
+    height: 70px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-large .cosas-amazon-price {
+    font-size: 21px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-large .cosas-amazon-btn {
+    font-size: 12px;
+    padding: 8px 16px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-xlarge {
+    padding: 15px;
+    max-width: 360px;
+    min-height: 160px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-xlarge .cosas-amazon-title {
+    font-size: 21px;
+    margin-bottom: 15px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-xlarge .cosas-amazon-image {
+    width: 80px;
+    height: 80px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-xlarge .cosas-amazon-price {
+    font-size: 23px;
+}
+
+.cosas-amazon-minimal.cosas-amazon-size-xlarge .cosas-amazon-btn {
+    font-size: 13px;
+    padding: 10px 20px;
 }
 
 /* Estilo destacado */
@@ -1047,15 +1166,17 @@
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
+/* Imagen en la parte superior - orden 1 */
 .cosas-amazon-carousel-item .cosas-amazon-image {
     width: 100%;
     height: 120px;
-    margin-bottom: 10px;
+    margin: 0 0 10px 0;
     overflow: hidden;
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
+    order: 1;
 }
 
 .cosas-amazon-carousel-item .cosas-amazon-image img {
@@ -1064,17 +1185,40 @@
     object-fit: cover;
 }
 
+/* Contenido estructurado */
 .cosas-amazon-carousel-item .cosas-amazon-content {
     flex: 1;
     display: flex;
     flex-direction: column;
+    gap: 8px;
     overflow: hidden;
 }
 
+/* Etiqueta debajo de la imagen - orden 2 */
+.cosas-amazon-carousel-item .cosas-amazon-special-offer {
+    margin: 0;
+    text-align: center;
+    order: 2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.cosas-amazon-carousel-item .cosas-amazon-special-offer span {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #e74c3c;
+    color: white;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Título debajo de la etiqueta - orden 3 */
 .cosas-amazon-carousel-item .cosas-amazon-title {
     font-size: 14px;
     font-weight: bold;
-    margin-bottom: 8px;
+    margin: 0;
     line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -1082,18 +1226,24 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: #333;
+    order: 3;
+    text-align: center;
 }
 
 .cosas-amazon-carousel-item .cosas-amazon-description {
     display: none;
 }
 
+/* Rating debajo del título - orden 4 */
 .cosas-amazon-carousel-item .cosas-amazon-rating {
-    margin: 5px 0;
+    margin: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
     font-size: 12px;
+    order: 4;
 }
 
 .cosas-amazon-carousel-item .cosas-amazon-rating .cosas-amazon-stars {
@@ -1107,42 +1257,61 @@
     height: 12px;
 }
 
-.cosas-amazon-carousel-item .cosas-amazon-pricing {
-    margin-top: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+.cosas-amazon-carousel-item .cosas-amazon-rating-number {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
 }
 
+.cosas-amazon-carousel-item .cosas-amazon-review-count {
+    font-size: 11px;
+    color: #666;
+}
+
+/* Precio debajo del rating - orden 5 */
 .cosas-amazon-carousel-item .cosas-amazon-price {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     color: #B12704;
+    margin: 0;
+    order: 5;
+    text-align: center;
 }
 
+/* Descuento debajo del precio - orden 6 */
+.cosas-amazon-carousel-item .cosas-amazon-discount {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #d93025;
+    color: white;
+    font-weight: bold;
+    align-self: center;
+    margin: 0;
+    order: 6;
+}
+
+/* Precio original debajo del descuento - orden 7 */
 .cosas-amazon-carousel-item .cosas-amazon-original-price {
     font-size: 12px;
     color: #999;
     text-decoration: line-through;
+    margin: 0;
+    order: 7;
+    text-align: center;
 }
 
-.cosas-amazon-carousel-item .cosas-amazon-discount {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    background: #d93025;
-    color: white;
-}
-
+/* Botón en la parte inferior - orden 8 */
 .cosas-amazon-carousel-item .cosas-amazon-btn {
-    margin-top: 10px;
+    margin-top: auto;
     padding: 8px 12px;
     font-size: 12px;
     border-radius: 4px;
     text-align: center;
     width: 100%;
     box-sizing: border-box;
+    order: 8;
+    min-height: 32px;
 }
 
 /* Tabla comparativa */
@@ -1869,13 +2038,19 @@
 
 /* Estilo específico para carousel */
 .cosas-amazon-carousel .cosas-amazon-special-offer {
-    margin: 8px 0;
+    margin: 0;
     text-align: center;
+    order: 2;
 }
 
 .cosas-amazon-carousel .cosas-amazon-special-offer span {
-    font-size: 11px;
-    padding: 4px 8px;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #e74c3c;
+    color: white;
+    font-weight: bold;
+    text-transform: uppercase;
 }
 
 /* Estilo específico para minimal */
@@ -2028,11 +2203,75 @@
         margin: 0 auto 10px;
     }
     
-    .cosas-amazon-carousel-item {
-        width: 160px;
-        max-width: 160px;
-        padding: 10px;
-    }
+/* Ajustes para diferentes tamaños de bloque - estilo carousel */
+.cosas-amazon-carousel.cosas-amazon-size-small .cosas-amazon-carousel-item {
+    width: 160px;
+    max-width: 160px;
+    padding: 10px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-small .cosas-amazon-carousel-item .cosas-amazon-image {
+    height: 100px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-small .cosas-amazon-carousel-item .cosas-amazon-title {
+    font-size: 12px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-small .cosas-amazon-carousel-item .cosas-amazon-price {
+    font-size: 14px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-small .cosas-amazon-carousel-item .cosas-amazon-btn {
+    font-size: 10px;
+    padding: 6px 10px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-large .cosas-amazon-carousel-item {
+    width: 240px;
+    max-width: 240px;
+    padding: 20px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-large .cosas-amazon-carousel-item .cosas-amazon-image {
+    height: 140px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-large .cosas-amazon-carousel-item .cosas-amazon-title {
+    font-size: 16px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-large .cosas-amazon-carousel-item .cosas-amazon-price {
+    font-size: 18px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-large .cosas-amazon-carousel-item .cosas-amazon-btn {
+    font-size: 14px;
+    padding: 10px 16px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item {
+    width: 280px;
+    max-width: 280px;
+    padding: 25px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item .cosas-amazon-image {
+    height: 160px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item .cosas-amazon-title {
+    font-size: 18px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item .cosas-amazon-price {
+    font-size: 20px;
+}
+
+.cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item .cosas-amazon-btn {
+    font-size: 16px;
+    padding: 12px 20px;
+}
     
     .cosas-amazon-minimal {
         max-width: 100% !important;
