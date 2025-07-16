@@ -526,6 +526,13 @@ class CosasAmazonHelpers {
         
         // Extraer precio actual - Patrones mejorados y más robustos
         $price_patterns = [
+            // PRIORIDAD MÁXIMA: Patrón específico identificado por el usuario
+            // div.a-section.a-spacing-micro > span.a-price.aok-align-center > span.a-offscreen
+            '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            // Variaciones del patrón específico
+            '/<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            '/<span[^>]*class="[^"]*aok-align-center[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
             // Patrones específicos para Amazon España (.es)
             '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span><span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span>/i',
@@ -554,16 +561,25 @@ class CosasAmazonHelpers {
         ];
         
         foreach ($price_patterns as $i => $pattern) {
+            self::log_debug("Probando patrón de precio $i: " . substr($pattern, 0, 80) . "...");
             if (preg_match($pattern, $html, $matches)) {
                 // Para patrones con tres grupos (completo + decimales + símbolo)
                 if (count($matches) > 3 && strpos($pattern, 'a-price-whole') !== false && strpos($pattern, 'a-price-fraction') !== false) {
                     $price_text = trim($matches[1]) . ',' . trim($matches[2]) . '€';
+                    self::log_debug("Precio extraído con patrón completo $i: " . $price_text);
                 }
                 // Para patrones con dos grupos (precio completo + decimales)
                 else if (count($matches) > 2 && strpos($pattern, 'a-price-whole') !== false) {
                     $price_text = trim($matches[1]) . ',' . trim($matches[2]);
+                    self::log_debug("Precio extraído con patrón dos grupos $i: " . $price_text);
                 } else {
                     $price_text = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
+                    self::log_debug("Precio extraído con patrón estándar $i: " . $price_text);
+                }
+                
+                // Logging especial para el patrón prioritario
+                if ($i <= 3) {
+                    self::log_debug("PATRÓN PRIORITARIO $i EXITOSO - Precio: " . $price_text);
                 }
                 
                 if (!empty($price_text) && (preg_match('/[0-9]/', $price_text) || preg_match('/[€$£¥₹₽]/', $price_text))) {
@@ -619,6 +635,13 @@ class CosasAmazonHelpers {
 
         // Extraer precio original (tachado) - Patrones mejorados y más robustos
         $original_price_patterns = [
+            // PRIORIDAD MÁXIMA: Patrón específico para precio original en la misma estructura
+            // div.a-section.a-spacing-micro > span.a-price.aok-align-center > span.a-offscreen (con precio tachado)
+            '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-price[^"]*a-text-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-text-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            // Variaciones del patrón específico para precio original
+            '/<span[^>]*class="[^"]*a-price[^"]*a-text-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            '/<span[^>]*class="[^"]*aok-align-center[^"]*a-text-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
             // Patrones específicos para precios originales con clases exactas
             '/<span[^>]*class="[^"]*a-price a-text-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>\s*([^<]+)\s*<\/span>/i',
             '/<span[^>]*class="[^"]*a-price-was[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
@@ -644,8 +667,15 @@ class CosasAmazonHelpers {
         
         $found_original_price = false;
         foreach ($original_price_patterns as $i => $pattern) {
+            self::log_debug("Probando patrón de precio original $i: " . substr($pattern, 0, 80) . "...");
             if (preg_match($pattern, $html, $matches)) {
                 $original_price = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
+                
+                // Logging especial para el patrón prioritario
+                if ($i <= 3) {
+                    self::log_debug("PATRÓN PRIORITARIO PRECIO ORIGINAL $i EXITOSO - Precio: " . $original_price);
+                }
+                
                 if (!empty($original_price) && (preg_match('/[0-9]/', $original_price) || preg_match('/[€$£¥₹₽]/', $original_price))) {
                     $product_data['originalPrice'] = $original_price;
                     $found_original_price = true;
@@ -963,6 +993,10 @@ class CosasAmazonHelpers {
         if (empty($product_data['price'])) {
             // Intento adicional con patrones más amplios antes de usar fallback
             $fallback_price_patterns = [
+                // PRIORIDAD MÁXIMA: Patrón específico identificado por el usuario
+                '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+                '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+                '/<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
                 // Patrones específicos para Amazon España
                 '/([0-9]+,[0-9]{2})\s*€/i',
                 '/€\s*([0-9]+,[0-9]{2})/i',
@@ -979,12 +1013,25 @@ class CosasAmazonHelpers {
                 '/price[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i',
                 // Buscar cualquier número que parezca un precio en el contexto
                 '/buybox[^0-9]*([0-9]+,[0-9]{2})/i',
-                '/cost[^0-9]*([0-9]+,[0-9]{2})/i'
+                '/cost[^0-9]*([0-9]+,[0-9]{2})/i',
+                // Patrones adicionales para a-offscreen en diferentes contextos
+                '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
+                '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([0-9]+[.,][0-9]+[€$£¥₹₽]?[^<]*)<\/span>/i',
+                // Patrones específicos para precios dentro de a-price
+                '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?([0-9]+,[0-9]{2}\s*€)/is',
+                '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?(€\s*[0-9]+,[0-9]{2})/is'
             ];
             
             foreach ($fallback_price_patterns as $i => $pattern) {
+                self::log_debug("Probando patrón fallback $i: " . substr($pattern, 0, 80) . "...");
                 if (preg_match($pattern, $html, $matches)) {
                     $price_text = trim($matches[1]);
+                    
+                    // Logging especial para patrones prioritarios de fallback
+                    if ($i <= 2) {
+                        self::log_debug("PATRÓN FALLBACK PRIORITARIO $i EXITOSO - Precio: " . $price_text);
+                    }
+                    
                     if (!empty($price_text) && preg_match('/[0-9]/', $price_text)) {
                         // Añadir símbolo de euro si no está presente
                         if (!preg_match('/[€$£¥₹₽]/', $price_text)) {
