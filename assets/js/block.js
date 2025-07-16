@@ -815,61 +815,85 @@
                 }
 
                 if (displayStyle === 'table') {
+                    // Para tabla, usar múltiples productos si están disponibles
+                    const tableProducts = productsData && productsData.length > 0 ? productsData : [product];
+                    const tableUrls = [];
+                    
+                    // Construir array de URLs para la tabla
+                    if (amazonUrl) {
+                        tableUrls.push(amazonUrl);
+                    }
+                    if (amazonUrls && amazonUrls.length > 0) {
+                        tableUrls.push(...amazonUrls);
+                    }
+                    
                     return el('div', { style: wrapperStyles },
                         el('div', { 
-                            className: `${containerClass}`, 
+                            className: `${containerClass} cosas-amazon-table-container`, 
                             style: containerStyles 
                         },
-                            el('table', { className: 'cosas-amazon-table', style: { width: '100%', borderCollapse: 'collapse' } },
+                            el('table', { className: 'cosas-amazon-table' },
                                 el('thead', {},
                                     el('tr', {},
-                                        el('th', { style: { border: '1px solid #ddd', padding: '8px' } }, 'Imagen'),
-                                        el('th', { style: { border: '1px solid #ddd', padding: '8px' } }, 'Título'),
-                                        el('th', { style: { border: '1px solid #ddd', padding: '8px' } }, 'Precio'),
-                                        el('th', { style: { border: '1px solid #ddd', padding: '8px' } }, 'Descuento'),
-                                        el('th', { style: { border: '1px solid #ddd', padding: '8px' } }, 'Acción')
+                                        el('th', { className: 'cosas-amazon-table-header' }, 'Imagen'),
+                                        el('th', { className: 'cosas-amazon-table-header' }, 'Producto'),
+                                        el('th', { className: 'cosas-amazon-table-header' }, 'Valoración'),
+                                        showPrice && el('th', { className: 'cosas-amazon-table-header' }, 'Precio'),
+                                        showDiscount && el('th', { className: 'cosas-amazon-table-header' }, 'Descuento'),
+                                        showButton && el('th', { className: 'cosas-amazon-table-header' }, 'Acción')
                                     )
                                 ),
                                 el('tbody', {},
-                                    el('tr', {},
-                                        el('td', { style: { border: '1px solid #ddd', padding: '8px' } },
-                                            product.image && el('img', {
-                                                src: product.image,
-                                                alt: product.title || 'Producto de Amazon',
-                                                style: { maxWidth: '80px', height: 'auto' }
-                                            })
-                                        ),
-                                        el('td', { style: { border: '1px solid #ddd', padding: '8px' } }, product.title || 'Producto'),
-                                        el('td', { style: { border: '1px solid #ddd', padding: '8px' } }, 
-                                            showPrice && product.price ? product.price : 'N/A'
-                                        ),
-                                        el('td', { style: { border: '1px solid #ddd', padding: '8px' } }, 
-                                            showDiscount && product.discount && product.discount > 0 && product.discount < 100 ? `-${product.discount}%` : 'N/A'
-                                        ),
-                                        el('td', { style: { border: '1px solid #ddd', padding: '8px' } }, 
-                                            showButton && el('a', {
-                                                href: amazonUrl,
-                                                target: '_blank',
-                                                rel: 'noopener noreferrer',
-                                                className: 'cosas-amazon-btn',
-                                                style: {
-                                                    backgroundColor: buttonColor,
-                                                    color: 'white',
-                                                    padding: '6px 12px',
-                                                    borderRadius: '4px',
-                                                    textDecoration: 'none',
-                                                    fontSize: '12px',
-                                                    fontWeight: 'bold'
-                                                }
-                                            }, buttonText || 'Ver en Amazon')
-                                        )
-                                    ),
-                                    // Placeholder para productos adicionales
-                                    amazonUrls.length > 0 && el('tr', {},
-                                        el('td', { colSpan: 5, style: { border: '1px solid #ddd', padding: '8px', textAlign: 'center' } },
-                                            `+ ${amazonUrls.length} productos adicionales`
-                                        )
-                                    )
+                                    tableUrls.map((url, index) => {
+                                        const productData = tableProducts[index] || {};
+                                        return el('tr', { key: index },
+                                            // Columna de imagen
+                                            el('td', { className: 'cosas-amazon-table-image' },
+                                                productData.image ? el('img', {
+                                                    src: productData.image,
+                                                    alt: productData.title || 'Producto de Amazon'
+                                                }) : el('div', { className: 'cosas-amazon-placeholder-image' }, '📦')
+                                            ),
+                                            // Columna de título
+                                            el('td', { className: 'cosas-amazon-table-title' },
+                                                el('h4', {}, productData.title || 'Producto de Amazon'),
+                                                showDescription && productData.description && el('p', { className: 'cosas-amazon-table-description' }, productData.description)
+                                            ),
+                                            // Columna de valoración
+                                            el('td', { className: 'cosas-amazon-table-rating' },
+                                                productData.rating ? el('div', { className: 'cosas-amazon-rating' },
+                                                    el('div', { className: 'cosas-amazon-stars' },
+                                                        Array.from({ length: 5 }, (_, i) => {
+                                                            const starClass = i < Math.floor(productData.rating) ? 'cosas-amazon-star filled' : 'cosas-amazon-star';
+                                                            return el('span', { key: i, className: starClass }, '★');
+                                                        })
+                                                    ),
+                                                    el('span', { className: 'cosas-amazon-rating-number' }, productData.rating),
+                                                    productData.review_count && el('span', { className: 'cosas-amazon-review-count' }, `(${productData.review_count})`)
+                                                ) : el('span', { className: 'cosas-amazon-no-rating' }, 'Sin valoración')
+                                            ),
+                                            // Columna de precio
+                                            showPrice && el('td', { className: 'cosas-amazon-table-price' },
+                                                productData.price ? el('span', { className: 'cosas-amazon-price' }, productData.price) : el('span', { className: 'cosas-amazon-no-price' }, 'N/A')
+                                            ),
+                                            // Columna de descuento
+                                            showDiscount && el('td', { className: 'cosas-amazon-table-discount' },
+                                                productData.discount && productData.discount > 0 ? [
+                                                    el('span', { className: 'cosas-amazon-discount', key: 'discount' }, `-${productData.discount}%`),
+                                                    productData.original_price && el('span', { className: 'cosas-amazon-original-price', key: 'original' }, productData.original_price)
+                                                ] : el('span', { className: 'cosas-amazon-no-discount' }, 'Sin descuento')
+                                            ),
+                                            // Columna de botón
+                                            showButton && el('td', { className: 'cosas-amazon-table-button' },
+                                                el('a', {
+                                                    href: url,
+                                                    target: '_blank',
+                                                    rel: 'noopener noreferrer',
+                                                    className: 'cosas-amazon-btn'
+                                                }, buttonText || 'Ver en Amazon')
+                                            )
+                                        );
+                                    })
                                 )
                             )
                         )

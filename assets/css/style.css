@@ -1315,6 +1315,14 @@
 }
 
 /* Tabla comparativa */
+.cosas-amazon-table-container {
+    width: 100%;
+    margin: 20px 0;
+    overflow-x: auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .cosas-amazon-table {
     width: 100%;
     border-collapse: collapse;
@@ -1322,7 +1330,7 @@
     border: 1px solid #e1e8ed;
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    min-width: 800px;
 }
 
 .cosas-amazon-table th, .cosas-amazon-table td {
@@ -1331,22 +1339,246 @@
     border: 1px solid #e1e8ed;
     vertical-align: top;
     word-wrap: break-word;
-    max-width: 200px;
 }
 
 .cosas-amazon-table th {
-    background: #f4f4f4;
+    background: #f8f9fa;
     font-weight: bold;
     font-size: 14px;
     color: #333;
     position: sticky;
     top: 0;
     z-index: 10;
+    text-align: center;
 }
 
 .cosas-amazon-table td {
     position: relative;
     overflow: hidden;
+}
+
+/* Columna de imagen */
+.cosas-amazon-table-image {
+    width: 120px;
+    text-align: center;
+    padding: 8px;
+}
+
+.cosas-amazon-table-image img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #e1e8ed;
+}
+
+.cosas-amazon-no-image,
+.cosas-amazon-placeholder-image {
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fa;
+    border: 1px solid #e1e8ed;
+    border-radius: 4px;
+    color: #666;
+    font-size: 24px;
+    margin: 0 auto;
+}
+
+/* Columna de título */
+.cosas-amazon-table-title {
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.cosas-amazon-table-title h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cosas-amazon-table-description {
+    margin: 0;
+    font-size: 12px;
+    color: #666;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Columna de valoración */
+.cosas-amazon-table-rating {
+    width: 140px;
+    text-align: center;
+}
+
+.cosas-amazon-table-rating .cosas-amazon-rating {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.cosas-amazon-table-rating .cosas-amazon-stars {
+    display: flex;
+    gap: 1px;
+    margin-bottom: 2px;
+}
+
+.cosas-amazon-table-rating .cosas-amazon-rating-number {
+    font-weight: bold;
+    font-size: 13px;
+    color: #333;
+}
+
+.cosas-amazon-table-rating .cosas-amazon-review-count {
+    font-size: 11px;
+    color: #666;
+}
+
+.cosas-amazon-no-rating {
+    color: #999;
+    font-size: 12px;
+}
+
+/* Columna de precio */
+.cosas-amazon-table-price {
+    width: 100px;
+    text-align: center;
+}
+
+.cosas-amazon-table-price .cosas-amazon-price {
+    font-size: 16px;
+    font-weight: bold;
+    color: #B12704;
+    display: block;
+}
+
+.cosas-amazon-no-price {
+    color: #999;
+    font-size: 12px;
+}
+
+/* Columna de descuento */
+.cosas-amazon-table-discount {
+    width: 120px;
+    text-align: center;
+}
+
+.cosas-amazon-table-discount .cosas-amazon-discount {
+    display: block;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #d93025;
+    color: white;
+    font-weight: bold;
+    margin: 0 auto 4px auto;
+    width: fit-content;
+}
+
+.cosas-amazon-table-discount .cosas-amazon-original-price {
+    font-size: 11px;
+    color: #999;
+    text-decoration: line-through;
+    display: block;
+}
+
+.cosas-amazon-no-discount {
+    color: #999;
+    font-size: 12px;
+}
+
+/* Columna de botón */
+.cosas-amazon-table-button {
+    width: 120px;
+    text-align: center;
+}
+
+.cosas-amazon-table-button .cosas-amazon-btn {
+    display: inline-block;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+    background: #FF9900;
+    border: none;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+    white-space: nowrap;
+}
+
+.cosas-amazon-table-button .cosas-amazon-btn:hover {
+    background: #e68900;
+}
+
+/* Placeholders y loading */
+.cosas-amazon-table-placeholder {
+    opacity: 0.7;
+}
+
+.cosas-amazon-loading {
+    color: #999;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* Responsive para tabla */
+@media (max-width: 768px) {
+    .cosas-amazon-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .cosas-amazon-table {
+        min-width: 600px;
+    }
+    
+    .cosas-amazon-table th,
+    .cosas-amazon-table td {
+        padding: 8px;
+    }
+    
+    .cosas-amazon-table-image {
+        width: 80px;
+    }
+    
+    .cosas-amazon-table-image img,
+    .cosas-amazon-no-image,
+    .cosas-amazon-placeholder-image {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .cosas-amazon-table-title {
+        min-width: 150px;
+        max-width: 200px;
+    }
+    
+    .cosas-amazon-table-rating {
+        width: 100px;
+    }
+    
+    .cosas-amazon-table-price,
+    .cosas-amazon-table-discount,
+    .cosas-amazon-table-button {
+        width: 80px;
+    }
 }
 
 .cosas-amazon-table td img {

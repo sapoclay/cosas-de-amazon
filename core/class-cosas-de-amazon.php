@@ -202,6 +202,31 @@ class CosasDeAmazon {
             
             // Renderizar siempre como carousel
             return $this->render_carousel($urls_array, $products_data, $merged_attributes);
+        } elseif ($display_style === 'table') {
+            // Para tabla, siempre usar múltiples productos
+            $urls_array = array();
+            if (!empty($amazon_url)) {
+                $urls_array[] = $amazon_url;
+            }
+            if (!empty($amazon_urls)) {
+                $urls_array = array_merge($urls_array, $amazon_urls);
+            }
+            
+            // Si no hay datos de productos, intentar obtenerlos
+            if (empty($products_data)) {
+                $products_data = array();
+                foreach ($urls_array as $url) {
+                    if (function_exists('cosas_amazon_get_product_data')) {
+                        $product_data_single = cosas_amazon_get_product_data($url);
+                        if (!empty($product_data_single)) {
+                            $products_data[] = $product_data_single;
+                        }
+                    }
+                }
+            }
+            
+            // Renderizar como tabla
+            return $this->render_table($urls_array, $products_data, $merged_attributes);
         } elseif ($multiple_products_mode && !empty($products_data)) {
             return $this->render_multiple_products($products_data, $merged_attributes);
         } else {
@@ -853,6 +878,190 @@ class CosasDeAmazon {
         }
         
         return null;
+    }
+    
+    /**
+     * Renderizar tabla comparativa de productos
+     */
+    private function render_table($urls_array, $products_data, $attributes) {
+        $html = '<div class="cosas-amazon-table-container cosas-amazon-size-' . esc_attr($attributes['blockSize']) . '">';
+        $html .= '<table class="cosas-amazon-table">';
+        
+        // Encabezados de la tabla
+        $html .= '<thead>';
+        $html .= '<tr>';
+        $html .= '<th>Imagen</th>';
+        $html .= '<th>Producto</th>';
+        $html .= '<th>Valoración</th>';
+        if ($attributes['showPrice']) {
+            $html .= '<th>Precio</th>';
+        }
+        if ($attributes['showDiscount']) {
+            $html .= '<th>Descuento</th>';
+        }
+        if ($attributes['showButton']) {
+            $html .= '<th>Acción</th>';
+        }
+        $html .= '</tr>';
+        $html .= '</thead>';
+        
+        // Cuerpo de la tabla
+        $html .= '<tbody>';
+        
+        foreach ($urls_array as $index => $url) {
+            $product_data = isset($products_data[$index]) ? $products_data[$index] : null;
+            
+            if (!empty($product_data)) {
+                $html .= $this->render_table_row($product_data, $url, $attributes);
+            } else {
+                $html .= $this->render_table_row_placeholder($url, $attributes);
+            }
+        }
+        
+        $html .= '</tbody>';
+        $html .= '</table>';
+        $html .= '</div>';
+        
+        return $html;
+    }
+    
+    /**
+     * Renderizar una fila de la tabla con datos del producto
+     */
+    private function render_table_row($product_data, $amazon_url, $attributes) {
+        $product_data = $this->normalize_product_data($product_data);
+        
+        if (!$product_data) {
+            return $this->render_table_row_placeholder($amazon_url, $attributes);
+        }
+        
+        $html = '<tr>';
+        
+        // Imagen
+        $html .= '<td class="cosas-amazon-table-image">';
+        if (!empty($product_data['image'])) {
+            $html .= '<img src="' . esc_url($product_data['image']) . '" alt="' . esc_attr($product_data['title'] ?? 'Producto de Amazon') . '">';
+        } else {
+            $html .= '<div class="cosas-amazon-no-image">Sin imagen</div>';
+        }
+        $html .= '</td>';
+        
+        // Título del producto
+        $html .= '<td class="cosas-amazon-table-title">';
+        if (!empty($product_data['title'])) {
+            $html .= '<h4>' . esc_html($product_data['title']) . '</h4>';
+        } else {
+            $html .= '<h4>Producto de Amazon</h4>';
+        }
+        
+        // Descripción si está habilitada
+        if ($attributes['showDescription'] && !empty($product_data['description'])) {
+            $html .= '<p class="cosas-amazon-table-description">' . esc_html(wp_trim_words($product_data['description'], 15)) . '</p>';
+        }
+        $html .= '</td>';
+        
+        // Valoración
+        $html .= '<td class="cosas-amazon-table-rating">';
+        if (!empty($product_data['rating'])) {
+            $html .= '<div class="cosas-amazon-rating">';
+            $html .= CosasAmazonHelpers::generate_rating_stars($product_data['rating']);
+            $html .= '<span class="cosas-amazon-rating-number">' . esc_html($product_data['rating']) . '</span>';
+            if (!empty($product_data['review_count'])) {
+                $html .= '<span class="cosas-amazon-review-count">(' . esc_html($product_data['review_count']) . ')</span>';
+            }
+            $html .= '</div>';
+        } else {
+            $html .= '<span class="cosas-amazon-no-rating">Sin valoración</span>';
+        }
+        $html .= '</td>';
+        
+        // Precio
+        if ($attributes['showPrice']) {
+            $html .= '<td class="cosas-amazon-table-price">';
+            if (!empty($product_data['price'])) {
+                $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
+            } else {
+                $html .= '<span class="cosas-amazon-no-price">N/A</span>';
+            }
+            $html .= '</td>';
+        }
+        
+        // Descuento
+        if ($attributes['showDiscount']) {
+            $html .= '<td class="cosas-amazon-table-discount">';
+            if (!empty($product_data['discount']) && $product_data['discount'] > 0) {
+                $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+                if (!empty($product_data['original_price'])) {
+                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['original_price']) . '</span>';
+                }
+            } else {
+                $html .= '<span class="cosas-amazon-no-discount">Sin descuento</span>';
+            }
+            $html .= '</td>';
+        }
+        
+        // Botón
+        if ($attributes['showButton']) {
+            $html .= '<td class="cosas-amazon-table-button">';
+            $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="noopener noreferrer" class="cosas-amazon-btn">';
+            $html .= esc_html($attributes['buttonText'] ?? 'Ver en Amazon');
+            $html .= '</a>';
+            $html .= '</td>';
+        }
+        
+        $html .= '</tr>';
+        
+        return $html;
+    }
+    
+    /**
+     * Renderizar una fila de la tabla como placeholder
+     */
+    private function render_table_row_placeholder($amazon_url, $attributes) {
+        $html = '<tr class="cosas-amazon-table-placeholder">';
+        
+        // Imagen placeholder
+        $html .= '<td class="cosas-amazon-table-image">';
+        $html .= '<div class="cosas-amazon-placeholder-image">📦</div>';
+        $html .= '</td>';
+        
+        // Título placeholder
+        $html .= '<td class="cosas-amazon-table-title">';
+        $html .= '<h4>Producto de Amazon</h4>';
+        $html .= '<p class="cosas-amazon-loading">Cargando datos...</p>';
+        $html .= '</td>';
+        
+        // Valoración placeholder
+        $html .= '<td class="cosas-amazon-table-rating">';
+        $html .= '<span class="cosas-amazon-loading">Cargando...</span>';
+        $html .= '</td>';
+        
+        // Precio placeholder
+        if ($attributes['showPrice']) {
+            $html .= '<td class="cosas-amazon-table-price">';
+            $html .= '<span class="cosas-amazon-loading">Cargando...</span>';
+            $html .= '</td>';
+        }
+        
+        // Descuento placeholder
+        if ($attributes['showDiscount']) {
+            $html .= '<td class="cosas-amazon-table-discount">';
+            $html .= '<span class="cosas-amazon-loading">Cargando...</span>';
+            $html .= '</td>';
+        }
+        
+        // Botón
+        if ($attributes['showButton']) {
+            $html .= '<td class="cosas-amazon-table-button">';
+            $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="noopener noreferrer" class="cosas-amazon-btn">';
+            $html .= esc_html($attributes['buttonText'] ?? 'Ver en Amazon');
+            $html .= '</a>';
+            $html .= '</td>';
+        }
+        
+        $html .= '</tr>';
+        
+        return $html;
     }
     
     /**
