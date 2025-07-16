@@ -297,6 +297,161 @@ class CosasDeAmazon {
             $html .= $this->render_product_content($product_data, $attributes, $amazon_url);
             $html .= '</div>';
             
+        } elseif ($attributes['displayStyle'] === 'compact') {
+            // Para estilo compacto: título arriba, luego main-content con imagen a la izquierda y contenido a la derecha
+            
+            // Título del producto en la parte superior
+            if (!empty($product_data['title'])) {
+                $html .= '<h3 class="cosas-amazon-title">' . esc_html($product_data['title']) . '</h3>';
+            }
+            
+            // Contenedor principal con imagen a la izquierda y contenido a la derecha
+            $html .= '<div class="cosas-amazon-main-content">';
+            
+            // Imagen a la izquierda
+            $html .= '<div class="cosas-amazon-image">';
+            if (!empty($product_data['image'])) {
+                $html .= '<img src="' . esc_url($product_data['image']) . '" alt="' . esc_attr($product_data['title']) . '" />';
+            }
+            $html .= '</div>';
+            
+            // Contenido a la derecha
+            $html .= '<div class="cosas-amazon-content">';
+            
+            // Añadir etiqueta de oferta especial
+            $html .= $this->render_special_offer_tag($product_data, $attributes);
+            
+            // Valoraciones del producto
+            if (CosasAmazonHelpers::are_ratings_enabled() && (!empty($product_data['rating']) || !empty($product_data['reviewCount']))) {
+                $html .= '<div class="cosas-amazon-rating">';
+                
+                // Estrellas
+                if (!empty($product_data['rating'])) {
+                    $html .= CosasAmazonHelpers::generate_rating_stars($product_data['rating']);
+                    $html .= '<span class="cosas-amazon-rating-number">' . esc_html($product_data['rating']) . '</span>';
+                }
+                
+                // Número de reseñas
+                if (!empty($product_data['reviewCount'])) {
+                    $html .= '<span class="cosas-amazon-review-count">' . CosasAmazonHelpers::format_review_count($product_data['reviewCount']) . '</span>';
+                }
+                
+                $html .= '</div>';
+            }
+            
+            // Precio del producto
+            if ($attributes['showPrice'] && !empty($product_data['price'])) {
+                $html .= '<div class="cosas-amazon-pricing">';
+                
+                // Descuento si existe
+                if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
+                    $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+                }
+                
+                // Precio actual
+                $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
+                
+                // Precio original si existe
+                if (!empty($product_data['originalPrice'])) {
+                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</span>';
+                }
+                
+                $html .= '</div>';
+            }
+            
+            // Botón de compra
+            if ($attributes['showButton'] && !empty($amazon_url)) {
+                $html .= '<div class="cosas-amazon-button">';
+                $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="nofollow" class="cosas-amazon-btn" style="background-color: ' . esc_attr($attributes['buttonColor']) . ';">';
+                $html .= esc_html($attributes['buttonText']);
+                $html .= '</a>';
+                $html .= '</div>';
+            }
+            
+            $html .= '</div>'; // Cerrar contenido
+            $html .= '</div>'; // Cerrar main-content
+            
+        } elseif ($attributes['displayStyle'] === 'featured') {
+            // Para estilo destacado: imagen arriba, etiqueta, título, rating derecha, descripción centro, precios centro, botón centro
+            
+            // Contenedor para agrupar elementos excepto el botón
+            $html .= '<div class="cosas-amazon-content-wrapper">';
+            
+            // Imagen en la parte superior
+            if (!empty($product_data['image'])) {
+                $html .= '<div class="cosas-amazon-image">';
+                $html .= '<img src="' . esc_url($product_data['image']) . '" alt="' . esc_attr($product_data['title']) . '" />';
+                $html .= '</div>';
+            }
+            
+            // Etiqueta de oferta especial debajo de la imagen
+            $html .= $this->render_special_offer_tag($product_data, $attributes);
+            
+            // Título del producto centrado
+            if (!empty($product_data['title'])) {
+                $html .= '<h3 class="cosas-amazon-title">' . esc_html($product_data['title']) . '</h3>';
+            }
+            
+            // Rating alineado a la derecha
+            if (CosasAmazonHelpers::are_ratings_enabled() && (!empty($product_data['rating']) || !empty($product_data['reviewCount']))) {
+                $html .= '<div class="cosas-amazon-rating">';
+                
+                // Estrellas
+                if (!empty($product_data['rating'])) {
+                    $html .= CosasAmazonHelpers::generate_rating_stars($product_data['rating']);
+                    $html .= '<span class="cosas-amazon-rating-number">' . esc_html($product_data['rating']) . '</span>';
+                }
+                
+                // Número de reseñas
+                if (!empty($product_data['reviewCount'])) {
+                    $html .= '<span class="cosas-amazon-review-count">' . CosasAmazonHelpers::format_review_count($product_data['reviewCount']) . '</span>';
+                }
+                
+                $html .= '</div>';
+            }
+            
+            // Descripción centrada
+            if ($attributes['showDescription'] && !empty($product_data['description'])) {
+                $description = $product_data['description'];
+                if (strlen($description) > $attributes['descriptionLength']) {
+                    $description = substr($description, 0, $attributes['descriptionLength']) . '...';
+                }
+                $html .= '<div class="cosas-amazon-description">';
+                $html .= '<p>' . esc_html($description) . '</p>';
+                $html .= '</div>';
+            }
+            
+            // Precios centrados
+            if ($attributes['showPrice'] && !empty($product_data['price'])) {
+                $html .= '<div class="cosas-amazon-pricing">';
+                
+                // Descuento si existe
+                if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
+                    $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+                }
+                
+                // Precio actual
+                $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
+                
+                // Precio original si existe
+                if (!empty($product_data['originalPrice'])) {
+                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</span>';
+                }
+                
+                $html .= '</div>';
+            }
+            
+            $html .= '</div>'; // Cerrar content-wrapper
+            
+            // Botón centrado en la parte inferior
+            if ($attributes['showButton'] && !empty($amazon_url)) {
+                $html .= '<div class="cosas-amazon-button">';
+                $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="nofollow" class="cosas-amazon-btn" style="background-color: ' . esc_attr($attributes['buttonColor']) . ';">';
+                $html .= esc_html($attributes['buttonText']);
+                $html .= '</a>';
+                $html .= '</div>';
+            }
+            
         } else {
             // Vertical y otros estilos
             if (!empty($product_data['image'])) {
