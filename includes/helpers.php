@@ -526,10 +526,17 @@ class CosasAmazonHelpers {
         
         // Extraer precio actual - Patrones mejorados y más robustos
         $price_patterns = [
-            // Nuevos patrones más específicos para precios actuales
+            // Patrones específicos para Amazon España (.es)
+            '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span><span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
+            // Patrones específicos para precios en euros
+            '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([0-9]+)<\/span><span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([0-9]+)<\/span><span[^>]*class="[^"]*a-price-symbol[^"]*"[^>]*>€<\/span>/i',
+            '/<span[^>]*class="[^"]*a-price-symbol[^"]*"[^>]*>€<\/span><span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([0-9]+)<\/span>/i',
+            '/<span[^>]*>€<\/span><span[^>]*>([0-9]+,[0-9]{2})<\/span>/i',
+            '/<span[^>]*>([0-9]+,[0-9]{2})<\/span><span[^>]*>€<\/span>/i',
+            // Patrones originales mejorados
             '/<span[^>]*id="priceblock_[^"]*price"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*id="priceblock_dealprice"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price a-text-price a-size-medium a-color-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
@@ -537,8 +544,6 @@ class CosasAmazonHelpers {
             '/<span[^>]*class="[^"]*apexPriceToPay[^"]*"[^>]*>.*?<span[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price-range[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price a-text-price a-size-medium a-color-price[^"]*"[^>]*>([^<]+)<\/span>/i',
-            // Patrones para precios con decimales
-            '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span><span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([^<]+)<\/span>/i',
             // Patrones más genéricos como fallback
             '/<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*>([€$£¥₹₽][^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/i',
@@ -550,17 +555,27 @@ class CosasAmazonHelpers {
         
         foreach ($price_patterns as $i => $pattern) {
             if (preg_match($pattern, $html, $matches)) {
+                // Para patrones con tres grupos (completo + decimales + símbolo)
+                if (count($matches) > 3 && strpos($pattern, 'a-price-whole') !== false && strpos($pattern, 'a-price-fraction') !== false) {
+                    $price_text = trim($matches[1]) . ',' . trim($matches[2]) . '€';
+                }
                 // Para patrones con dos grupos (precio completo + decimales)
-                if (count($matches) > 2 && strpos($pattern, 'a-price-whole') !== false) {
+                else if (count($matches) > 2 && strpos($pattern, 'a-price-whole') !== false) {
                     $price_text = trim($matches[1]) . ',' . trim($matches[2]);
                 } else {
                     $price_text = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
                 }
                 
                 if (!empty($price_text) && (preg_match('/[0-9]/', $price_text) || preg_match('/[€$£¥₹₽]/', $price_text))) {
-                    $product_data['price'] = $price_text;
-                    self::log_debug("Precio encontrado con patrón $i: " . $price_text);
-                    break;
+                    // Limpiar precio de caracteres extraños pero mantener formato
+                    $price_text = preg_replace('/[^\d€$£¥₹₽,.\s]/', '', $price_text);
+                    $price_text = trim($price_text);
+                    
+                    if (!empty($price_text)) {
+                        $product_data['price'] = $price_text;
+                        self::log_debug("Precio encontrado con patrón $i: " . $price_text);
+                        break;
+                    }
                 }
             }
         }
@@ -948,23 +963,35 @@ class CosasAmazonHelpers {
         if (empty($product_data['price'])) {
             // Intento adicional con patrones más amplios antes de usar fallback
             $fallback_price_patterns = [
+                // Patrones específicos para Amazon España
+                '/([0-9]+,[0-9]{2})\s*€/i',
+                '/€\s*([0-9]+,[0-9]{2})/i',
+                '/([0-9]+\.[0-9]{3},[0-9]{2})\s*€/i',
+                '/€\s*([0-9]+\.[0-9]{3},[0-9]{2})/i',
                 // Buscar cualquier precio que se vea como precio
                 '/[€$£¥₹₽]\s*([0-9]+(?:[.,][0-9]+)?)/i',
                 '/([0-9]+(?:[.,][0-9]+)?)\s*[€$£¥₹₽]/i',
                 // Buscar precios en formato específico
+                '/precio[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*€/i',
+                '/price[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*€/i',
+                // Patrones más genéricos
                 '/precio[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i',
                 '/price[^0-9]*([0-9]+(?:[.,][0-9]+)?)/i',
-                // Buscar cualquier número que parezca un precio
-                '/([0-9]+,[0-9]{2})\s*€/i',
-                '/€\s*([0-9]+,[0-9]{2})/i'
+                // Buscar cualquier número que parezca un precio en el contexto
+                '/buybox[^0-9]*([0-9]+,[0-9]{2})/i',
+                '/cost[^0-9]*([0-9]+,[0-9]{2})/i'
             ];
             
-            foreach ($fallback_price_patterns as $pattern) {
+            foreach ($fallback_price_patterns as $i => $pattern) {
                 if (preg_match($pattern, $html, $matches)) {
                     $price_text = trim($matches[1]);
                     if (!empty($price_text) && preg_match('/[0-9]/', $price_text)) {
+                        // Añadir símbolo de euro si no está presente
+                        if (!preg_match('/[€$£¥₹₽]/', $price_text)) {
+                            $price_text = $price_text . '€';
+                        }
                         $product_data['price'] = $price_text;
-                        self::log_debug("Precio extraído con patrón fallback: " . $price_text);
+                        self::log_debug("Precio extraído con patrón fallback $i: " . $price_text);
                         break;
                     }
                 }
@@ -1188,7 +1215,7 @@ class CosasAmazonHelpers {
             return 0;
         }
         
-        // Limpiar el string manteniendo solo números, comas y puntos
+        // Limpiar el string manteniendo solo números, comas, puntos y símbolos de moneda
         $clean_price = preg_replace('/[^0-9,.]/', '', $price_string);
         
         if (empty($clean_price)) {
@@ -1202,7 +1229,7 @@ class CosasAmazonHelpers {
             $dot_pos = strrpos($clean_price, '.');
             
             if ($comma_pos > $dot_pos) {
-                // Formato europeo: 1.234,56
+                // Formato europeo: 1.234,56 (común en Amazon España)
                 $clean_price = str_replace('.', '', $clean_price);
                 $clean_price = str_replace(',', '.', $clean_price);
             } else {
@@ -1213,7 +1240,7 @@ class CosasAmazonHelpers {
             // Solo comas
             $parts = explode(',', $clean_price);
             if (count($parts) == 2 && strlen($parts[1]) <= 2) {
-                // Formato decimal europeo: 12,34
+                // Formato decimal europeo: 12,34 (común en Amazon España)
                 $clean_price = str_replace(',', '.', $clean_price);
             } else {
                 // Separador de miles: 1,234
@@ -1361,18 +1388,30 @@ class CosasAmazonHelpers {
         
         self::log_debug("Intentando resolver URL corta: $url");
         
-        // Método 1: Usar cURL para seguir redirects
+        // Método 1: Usar cURL para seguir redirects con mejor configuración
         if (function_exists('curl_init')) {
             $curl = curl_init();
             curl_setopt($curl, CURLOPT_URL, $url);
             curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($curl, CURLOPT_MAXREDIRS, 5);
-            curl_setopt($curl, CURLOPT_TIMEOUT, 15);
+            curl_setopt($curl, CURLOPT_MAXREDIRS, 10); // Aumentar redirects
+            curl_setopt($curl, CURLOPT_TIMEOUT, 20); // Más tiempo
             curl_setopt($curl, CURLOPT_NOBODY, true); // Solo headers
             curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
+            // Añadir headers adicionales para ser más convincente
+            curl_setopt($curl, CURLOPT_HTTPHEADER, [
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language: es-ES,es;q=0.9,en;q=0.8',
+                'Accept-Encoding: gzip, deflate, br',
+                'Connection: keep-alive',
+                'Upgrade-Insecure-Requests: 1',
+                'Sec-Fetch-Dest: document',
+                'Sec-Fetch-Mode: navigate',
+                'Sec-Fetch-Site: none',
+                'Sec-Fetch-User: ?1'
+            ]);
             
             $response = curl_exec($curl);
             $final_url = curl_getinfo($curl, CURLINFO_EFFECTIVE_URL);
