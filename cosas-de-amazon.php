@@ -19,6 +19,9 @@ define('COSAS_AMAZON_VERSION', '2.2.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
+// Activar debugging temporalmente
+define('COSAS_AMAZON_DEBUG', true);
+
 // Incluir archivos necesarios y core modular
 require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/helpers.php';
 require_once COSAS_AMAZON_PLUGIN_PATH . 'core/class-cosas-de-amazon.php';
