@@ -253,14 +253,29 @@ class CosasAmazonHelpers {
      * Continuar con el flujo original de get_product_data
      */
     private static function continue_get_product_data($url, $asin, $force_refresh = false) {
+        // Crear clave de caché más específica que incluya tanto ASIN como hash de URL
+        $url_hash = substr(md5($url), 0, 8); // Hash corto de la URL
+        $cache_key = 'cosas_amazon_product_' . $asin . '_' . $url_hash;
+        
         // Verificar caché (solo si no se fuerza refresh)
         if (!$force_refresh) {
-            $cache_key = 'cosas_amazon_product_' . $asin;
             $cached_data = get_transient($cache_key);
             
             if ($cached_data !== false) {
-                self::log_debug('Datos obtenidos desde caché', $asin);
-                return $cached_data;
+                self::log_debug('Datos obtenidos desde caché para ASIN: ' . $asin . ' URL: ' . $url);
+                
+                // Validar que los datos en caché tengan descuentos coherentes si aplica
+                if (self::is_strict_discount_validation_enabled() && !empty($cached_data['discount'])) {
+                    if (!self::validate_cached_discount_data($cached_data)) {
+                        self::log_debug('❌ Datos en caché con descuentos inválidos, invalidando caché para ' . $asin);
+                        delete_transient($cache_key);
+                    } else {
+                        self::log_debug('✅ Datos de caché validados para ' . $asin . ' desde ' . $url);
+                        return $cached_data;
+                    }
+                } else {
+                    return $cached_data;
+                }
             }
         }
 
@@ -272,9 +287,9 @@ class CosasAmazonHelpers {
             self::log_debug('Usando datos simulados por configuración');
             $simulated_data = self::get_simulated_data($asin, $url);
             
-            // Guardar en caché
+            // Guardar en caché con la nueva clave específica
             $cache_duration = self::get_cache_duration();
-            set_transient('cosas_amazon_product_' . $asin, $simulated_data, $cache_duration);
+            set_transient($cache_key, $simulated_data, $cache_duration);
             
             return $simulated_data;
         }
@@ -285,20 +300,25 @@ class CosasAmazonHelpers {
         if ($product_data && !empty($product_data['title'])) {
             // Verificar si son datos de fallback
             if (strpos($product_data['title'], 'Producto de Amazon –') === 0) {
-                self::log_debug('Datos de fallback obtenidos', $asin);
+                self::log_debug('Datos de fallback obtenidos para ASIN: ' . $asin);
             } else {
-                self::log_debug('Datos reales obtenidos exitosamente', $asin);
+                self::log_debug('Datos reales obtenidos exitosamente para ASIN: ' . $asin . ' URL: ' . $url);
+                
+                // Log adicional para debugging de múltiples productos
+                if (!empty($product_data['discount'])) {
+                    self::log_debug('🏷️  Descuento detectado en producto: ' . $product_data['discount'] . '% para URL: ' . $url);
+                }
             }
             
-            // Guardar en caché
+            // Guardar en caché con la nueva clave específica
             $cache_duration = self::get_cache_duration();
-            set_transient('cosas_amazon_product_' . $asin, $product_data, $cache_duration);
-            self::log_debug('Datos guardados en caché por ' . $cache_duration . ' segundos', $asin);
+            set_transient($cache_key, $product_data, $cache_duration);
+            self::log_debug('Datos guardados en caché por ' . $cache_duration . ' segundos con clave: ' . $cache_key);
             
             return $product_data;
         }
 
-        self::log_debug('No se pudieron obtener datos del producto', $asin);
+        self::log_debug('No se pudieron obtener datos del producto para ASIN: ' . $asin . ' URL: ' . $url);
         return false;
     }
     
@@ -597,28 +617,36 @@ class CosasAmazonHelpers {
             }
         }
         
-        // Extraer descuento directo de Amazon (patrones mejorados)
+        // Extraer descuento directo de Amazon (patrones mejorados y más específicos)
         $discount_patterns = [
-            // Patrones específicos para descuentos directos
+            // Patrones específicos para descuentos directos de Amazon con alta precisión
             '/<span[^>]*class="[^"]*savingPriceOverride[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
             '/<span[^>]*class="[^"]*savingsPercentage[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
-            '/<span[^>]*class="[^"]*a-size-large a-color-price[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
             '/<span[^>]*class="[^"]*reinventPriceSavingsPercentageMargin[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
-            // Nuevos patrones para descuentos más específicos
-            '/<span[^>]*class="[^"]*a-letter-space[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
-            '/<span[^>]*class="[^"]*a-size-base a-color-price[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
-            '/<span[^>]*class="[^"]*a-color-price[^"]*"[^>]*>.*?-([0-9]+)%[^<]*<\/span>/i',
-            '/<span[^>]*class="[^"]*a-color-success[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
-            // Patrones para texto en español
-            '/<span[^>]*>.*?descuento[^0-9]*([0-9]+)%[^<]*<\/span>/i',
-            '/<span[^>]*>.*?ahorra[^0-9]*([0-9]+)%[^<]*<\/span>/i',
-            '/<span[^>]*>.*?ahorras[^0-9]*([0-9]+)%[^<]*<\/span>/i',
-            // Patrones adicionales para descuentos
-            '/<span[^>]*>\s*-([0-9]+)%\s*<\/span>/i',
-            '/<span[^>]*>\s*\(([0-9]+)%\s*descuento\)\s*<\/span>/i',
-            // Patrones más genéricos
-            '/([0-9]+)%\s*de\s*descuento/i',
-            '/descuento\s*:?\s*([0-9]+)%/i'
+            
+            // Patrones específicos para descuentos con clases de Amazon conocidas
+            '/<span[^>]*class="[^"]*a-size-large[^"]*a-color-price[^"]*"[^>]*>\s*-?\s*([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*class="[^"]*a-size-base[^"]*a-color-price[^"]*"[^>]*>\s*-?\s*([0-9]+)%[^<]*<\/span>/i',
+            
+            // Patrones para texto en español con contexto específico de descuento
+            '/<span[^>]*class="[^"]*[^"]*"[^>]*>\s*(?:descuento|ahorra|ahorras)\s*:?\s*([0-9]+)%[^<]*<\/span>/i',
+            '/<span[^>]*>\s*\(\s*([0-9]+)%\s*descuento\s*\)\s*<\/span>/i',
+            '/<span[^>]*>\s*-\s*([0-9]+)%\s*descuento\s*<\/span>/i',
+            
+            // Patrones más restrictivos para evitar falsos positivos
+            '/<span[^>]*class="[^"]*a-color-success[^"]*"[^>]*>\s*([0-9]+)%\s*de\s*descuento[^<]*<\/span>/i',
+            
+            // Remover patrones demasiado genéricos que causaban falsos positivos:
+            // '/<span[^>]*class="[^"]*a-letter-space[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
+            // '/<span[^>]*class="[^"]*a-color-price[^"]*"[^>]*>.*?-([0-9]+)%[^<]*<\/span>/i',
+            // '/<span[^>]*class="[^"]*a-color-success[^"]*"[^>]*>.*?([0-9]+)%[^<]*<\/span>/i',
+            // '/<span[^>]*>.*?descuento[^0-9]*([0-9]+)%[^<]*<\/span>/i',
+            // '/<span[^>]*>.*?ahorra[^0-9]*([0-9]+)%[^<]*<\/span>/i',
+            // '/<span[^>]*>.*?ahorras[^0-9]*([0-9]+)%[^<]*<\/span>/i',
+            // '/<span[^>]*>\s*-([0-9]+)%\s*<\/span>/i',
+            // '/<span[^>]*>\s*\(([0-9]+)%\s*descuento\)\s*<\/span>/i',
+            // '/([0-9]+)%\s*de\s*descuento/i',
+            // '/descuento\s*:?\s*([0-9]+)%/i'
         ];
         
         $found_discount = false;
@@ -626,10 +654,25 @@ class CosasAmazonHelpers {
             if (preg_match($pattern, $html, $matches)) {
                 $discount_value = intval($matches[1]);
                 if ($discount_value >= 1 && $discount_value <= 90) {
-                    $product_data['discount'] = $discount_value;
-                    $found_discount = true;
-                    self::log_debug("Descuento directo encontrado con patrón $i: {$discount_value}%");
-                    break;
+                    // Si la validación estricta está activada, validar el contexto
+                    if (self::is_strict_discount_validation_enabled()) {
+                        if (self::validate_discount_context($html, $discount_value)) {
+                            $product_data['discount'] = $discount_value;
+                            $found_discount = true;
+                            self::log_debug("✅ Descuento directo encontrado y validado con patrón $i: {$discount_value}%");
+                            break;
+                        } else {
+                            self::log_debug("❌ Descuento {$discount_value}% descartado por contexto inválido (patrón $i)");
+                        }
+                    } else {
+                        // Sin validación estricta, aceptar el descuento
+                        $product_data['discount'] = $discount_value;
+                        $found_discount = true;
+                        self::log_debug("✅ Descuento directo encontrado con patrón $i: {$discount_value}% (validación estricta desactivada)");
+                        break;
+                    }
+                } else {
+                    self::log_debug("❌ Descuento {$discount_value}% fuera de rango válido (patrón $i)");
                 }
             }
         }
@@ -686,7 +729,35 @@ class CosasAmazonHelpers {
             }
         }
         
-        // Solo calcular descuento desde precios si NO se encontró descuento directo
+        // Validar descuento directo encontrado
+        if ($found_discount && !empty($product_data['discount'])) {
+            // Solo aplicar validaciones estrictas si están activadas
+            if (self::is_strict_discount_validation_enabled()) {
+                // Si se encontró descuento directo pero no hay precio original válido, es sospechoso
+                if (!$found_original_price || empty($product_data['originalPrice'])) {
+                    self::log_debug("⚠️  Descuento directo sin precio original - validación estricta activada");
+                    
+                    // Si no hay precio original para validar, el descuento es dudoso
+                    $product_data['discount'] = '';
+                    $found_discount = false;
+                    self::log_debug("❌ Descuento directo eliminado: sin precio original para validar");
+                } else {
+                    // Validar que el descuento directo sea coherente con los precios usando la nueva función
+                    if (!self::validate_price_difference($product_data['price'], $product_data['originalPrice'], $product_data['discount'])) {
+                        self::log_debug("❌ Descuento directo eliminado: validación de precios falló");
+                        $product_data['discount'] = '';
+                        $product_data['originalPrice'] = '';
+                        $found_discount = false;
+                    } else {
+                        self::log_debug("✅ Descuento directo validado completamente");
+                    }
+                }
+            } else {
+                self::log_debug("✅ Descuento directo aceptado (validación estricta desactivada)");
+            }
+        }
+        
+        // Solo calcular descuento desde precios si NO se encontró descuento directo válido
         if (!$found_discount && $found_original_price && !empty($product_data['price']) && !empty($product_data['originalPrice'])) {
             $current_price = self::extract_numeric_price($product_data['price']);
             $original_price = self::extract_numeric_price($product_data['originalPrice']);
@@ -698,27 +769,26 @@ class CosasAmazonHelpers {
                 // Solo asignar descuento si es un valor razonable (entre 1% y 90%)
                 if ($discount >= 1 && $discount <= 90) {
                     $product_data['discount'] = $discount;
-                    self::log_debug("Descuento calculado desde precios: {$discount}%");
+                    self::log_debug("✅ Descuento calculado desde precios: {$discount}%");
                 } else {
-                    self::log_debug("Descuento inválido calculado: {$discount}%");
+                    self::log_debug("❌ Descuento inválido calculado: {$discount}%");
                 }
             } else {
-                self::log_debug("No hay diferencia de precio válida para descuento");
+                self::log_debug("❌ No hay diferencia de precio válida para descuento");
+                // Si no hay descuento válido, limpiar también el precio original
+                $product_data['originalPrice'] = '';
             }
         } else {
             self::log_debug("No se calculó descuento desde precios - ya hay descuento directo o no se encontró precio original válido");
         }
         
-        // Solo limpiar si NO hay descuento directo Y no hay descuento calculado válido
-        if ((!$found_discount && empty($product_data['discount'])) || $product_data['discount'] === 0) {
+        // Validación final: limpiar si no hay descuento válido
+        if (empty($product_data['discount']) || $product_data['discount'] === 0) {
             $product_data['discount'] = '';
-            // Solo limpiar precio original si no hay descuento directo
-            if (!$found_discount) {
-                $product_data['originalPrice'] = '';
-            }
-            self::log_debug("Descuento limpiado - no hay descuento válido");
+            $product_data['originalPrice'] = '';
+            self::log_debug("🧹 Datos de descuento limpiados - no hay descuento válido");
         } else {
-            self::log_debug("Descuento válido mantenido: " . $product_data['discount'] . "%");
+            self::log_debug("✅ Descuento final validado: " . $product_data['discount'] . "%");
         }
         
         // Extraer imagen principal - priorizar landingImage
@@ -1305,6 +1375,143 @@ class CosasAmazonHelpers {
         }
         
         return 0;
+    }
+    
+    /**
+     * Verificar si la validación estricta de descuentos está activada
+     */
+    public static function is_strict_discount_validation_enabled() {
+        $options = get_option('cosas_amazon_options', array());
+        return isset($options['strict_discount_validation']) ? (bool)$options['strict_discount_validation'] : true; // Por defecto activado
+    }
+    
+    /**
+     * Validar si un descuento detectado está en un contexto válido de Amazon
+     */
+    public static function validate_discount_context($html, $discount_percentage) {
+        if (empty($discount_percentage) || $discount_percentage <= 0) {
+            return false;
+        }
+        
+        // Buscar indicadores de que el descuento está en un contexto real de descuento
+        $valid_context_patterns = [
+            // Contextos donde el descuento es probablemente real
+            '/class="[^"]*savings[^"]*"[^>]*>[^<]*' . $discount_percentage . '%/i',
+            '/class="[^"]*discount[^"]*"[^>]*>[^<]*' . $discount_percentage . '%/i',
+            '/class="[^"]*price[^"]*"[^>]*>[^<]*-\s*' . $discount_percentage . '%/i',
+            '/id="[^"]*price[^"]*"[^>]*>[^<]*' . $discount_percentage . '%/i',
+            '/class="[^"]*deal[^"]*"[^>]*>[^<]*' . $discount_percentage . '%/i',
+            '/descuento[^0-9]*' . $discount_percentage . '%/i',
+            '/ahorro[^0-9]*' . $discount_percentage . '%/i',
+            '/rebaja[^0-9]*' . $discount_percentage . '%/i'
+        ];
+        
+        foreach ($valid_context_patterns as $pattern) {
+            if (preg_match($pattern, $html)) {
+                self::log_debug("✅ Descuento {$discount_percentage}% validado por contexto");
+                return true;
+            }
+        }
+        
+        // Buscar contextos sospechosos donde el porcentaje NO es un descuento
+        $invalid_context_patterns = [
+            // Porcentajes que probablemente no son descuentos
+            '/valoración[^0-9]*' . $discount_percentage . '%/i',
+            '/rating[^0-9]*' . $discount_percentage . '%/i',
+            '/satisfaction[^0-9]*' . $discount_percentage . '%/i',
+            '/satisfacción[^0-9]*' . $discount_percentage . '%/i',
+            '/recomiendan[^0-9]*' . $discount_percentage . '%/i',
+            '/recommend[^0-9]*' . $discount_percentage . '%/i',
+            '/battery[^0-9]*' . $discount_percentage . '%/i',
+            '/batería[^0-9]*' . $discount_percentage . '%/i',
+            '/efficiency[^0-9]*' . $discount_percentage . '%/i',
+            '/eficiencia[^0-9]*' . $discount_percentage . '%/i'
+        ];
+        
+        foreach ($invalid_context_patterns as $pattern) {
+            if (preg_match($pattern, $html)) {
+                self::log_debug("❌ Descuento {$discount_percentage}% invalidado por contexto sospechoso");
+                return false;
+            }
+        }
+        
+        // Si no encontramos contexto válido específico, es sospechoso
+        self::log_debug("⚠️  Descuento {$discount_percentage}% sin contexto válido encontrado");
+        return false;
+    }
+    
+    /**
+     * Validar que los precios actual y original sean diferentes y coherentes
+     */
+    public static function validate_price_difference($current_price_str, $original_price_str, $expected_discount = null) {
+        if (empty($current_price_str) || empty($original_price_str)) {
+            return false;
+        }
+        
+        $current_price = self::extract_numeric_price($current_price_str);
+        $original_price = self::extract_numeric_price($original_price_str);
+        
+        // Ambos precios deben ser válidos y positivos
+        if ($current_price <= 0 || $original_price <= 0) {
+            self::log_debug("❌ Precios inválidos: actual={$current_price}, original={$original_price}");
+            return false;
+        }
+        
+        // El precio original debe ser mayor que el actual para que haya descuento
+        if ($original_price <= $current_price) {
+            self::log_debug("❌ Precio original no es mayor que el actual: {$original_price} <= {$current_price}");
+            return false;
+        }
+        
+        // Si se proporciona un descuento esperado, verificar que sea coherente
+        if ($expected_discount !== null && $expected_discount > 0) {
+            $real_discount = round((($original_price - $current_price) / $original_price) * 100);
+            $difference = abs($real_discount - $expected_discount);
+            
+            // Permitir diferencia máxima de 5%
+            if ($difference > 5) {
+                self::log_debug("❌ Descuento incoherente: esperado {$expected_discount}%, real {$real_discount}%");
+                return false;
+            }
+            
+            self::log_debug("✅ Descuento coherente: esperado {$expected_discount}%, real {$real_discount}%");
+        }
+        
+        // Validar que la diferencia de precio sea significativa (mínimo 1%)
+        $min_discount = ($original_price - $current_price) / $original_price * 100;
+        if ($min_discount < 1) {
+            self::log_debug("❌ Diferencia de precio insignificante: {$min_discount}%");
+            return false;
+        }
+        
+        self::log_debug("✅ Precios validados: actual={$current_price}, original={$original_price}");
+        return true;
+    }
+    
+    /**
+     * Validar datos de descuento en caché para múltiples productos
+     */
+    public static function validate_cached_discount_data($cached_data) {
+        if (empty($cached_data['discount']) || $cached_data['discount'] <= 0) {
+            return true; // No hay descuento, está bien
+        }
+        
+        // Si hay descuento, debe haber precio original y coherencia
+        if (empty($cached_data['originalPrice'])) {
+            self::log_debug('❌ Descuento en caché sin precio original');
+            return false;
+        }
+        
+        // Validar coherencia de precios si están disponibles
+        if (!empty($cached_data['price']) && !empty($cached_data['originalPrice'])) {
+            return self::validate_price_difference(
+                $cached_data['price'], 
+                $cached_data['originalPrice'], 
+                $cached_data['discount']
+            );
+        }
+        
+        return true; // Asumir válido si no se puede validar completamente
     }
     
     /**

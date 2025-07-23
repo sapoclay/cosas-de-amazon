@@ -1,10 +1,24 @@
 # Cosas de Amazon - Un plugin para WordPress
 
-Plugin para mostrar productos de Amazon con extracción avanzada de datos y múltiples estilos de visualización. Optimizado para Amazon España con soporte completo para formato europeo de precios.
+Plugin para mostrar productos de Amazon con extracción avanzada de datos, múltiples estilos de visualización y sistema de limitaciones progresivas. Optimizado para Amazon España con soporte completo para formato europeo de precios.
 
-## 🚀 Características Principales
+>!Nota Por el momento solo funciona correctamente la versíon de Scraping. La API de Amazon todavía no funciona.
 
-### 📊 Extracción Avanzada de Datos
+## 🆕 Versión 2.11.0 - Correcciones
+
+### ✅ Problemas resueltos
+- **🎯 Menú duplicado**: Eliminada la duplicación del menú "Cosas de Amazon" en el panel de administración
+- **⚙️ Configuración de opciones**: Corregidos errores falsos en el solucionador automático
+
+### 🚀 Mejoras técnicas
+- Firma AWS4 con mapeo correcto de regiones (España → eu-west-1, Alemania → eu-central-1, etc.)
+- Sistema de fallbacks entre regiones optimizado
+- Validación correcta de update_option() considerando comportamiento WordPress
+- Logs mejorados con información detallada de regiones AWS
+
+## 🚀 Características principales
+
+### 📊 Extracción avanzada de datos
 - **Patrones específicos** para Amazon España con estructura HTML optimizada
 - **Resolución inteligente** de URLs cortas (amzn.to, a.co)
 - **Formato europeo** de precios (1.234,56€) con detección automática
@@ -13,14 +27,22 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos y múl
 - **Caché inteligente** para optimizar rendimiento
 
 ### 🎨 Estilos de Visualización
-- **Tarjeta compacta** - Diseño minimalista para barras laterales
-- **Tarjeta destacada** - Formato grande para contenido principal
-- **Muestra mínima** - Vista reducida con elementos esenciales
-- **Carousel responsive** - Desplazamiento horizontal con múltiples productos
-- **Tabla comparativa** - Comparación lado a lado con 6 columnas
+- **Horizontal** - Layout tradicional con imagen izquierda (máx. 2 productos)
+- **Compacta** - Diseño minimalista con limitaciones progresivas (2-3 productos)
+- **Vertical** - Vista centrada con limitaciones progresivas (2-3 productos)
+- **Muestra mínima** - Vista reducida con estructura columnar (máx. 3 productos)
+- **Carousel responsive** - Desplazamiento horizontal sin limitaciones
+- **Destacada** - Formato grande con gradiente
+- **Tabla comparativa** - Comparación lado a lado hasta 6 columnas
+
+### ⚙️ Sistema de Limitaciones Progresivas
+- **Validación dual** - Frontend (editor) y backend (renderizado)
+- **Dropdowns dinámicos** - Opciones que se adaptan al estilo y tamaño
+- **Grid responsivo** - Layout optimizado para múltiples productos
+- **Sincronización editor-frontend** - Vista previa exacta
 
 ### 🔧 Integración WordPress
-- **Bloque Gutenberg** nativo con editor visual
+- **Bloque Gutenberg** nativo con editor visual sincronizado
 - **Shortcode tradicional** compatible con cualquier tema
 - **Responsive design** adaptado a todos los dispositivos
 - **Configuración avanzada** desde el panel de administración
@@ -90,33 +112,6 @@ Tabla comparativa con columnas para imagen, título, valoración, precio, descue
 - **Mediano**: Tamaño estándar recomendado
 - **Grande**: Para contenido principal destacado
 
-## Estructura de Archivos
-
-```
-cosas-de-amazon/
-├── cosas-de-amazon.php          # Archivo principal del plugin
-├── README.md                    # Documentación
-├── LICENSE                      # Licencia GPL v2
-├── CHANGELOG.md                 # Historial de cambios
-├── assets/
-│   ├── css/
-│   │   ├── style.css           # CSS del frontend
-│   │   └── editor.css          # CSS del editor
-│   ├── js/
-│   │   ├── block.js            # JavaScript del bloque
-│   │   ├── frontend.js         # JavaScript del frontend
-│   │   └── carousel.js         # JavaScript del carousel
-│   └── images/                 # Imágenes del plugin
-├── core/
-│   ├── class-cosas-de-amazon.php # Clase principal
-│   └── rest-endpoints.php      # Endpoints REST
-├── includes/
-│   ├── helpers.php             # Funciones auxiliares
-│   ├── admin.php               # Panel de administración
-│   └── [otros archivos]        # Funciones específicas
-└── languages/
-    └── cosas-de-amazon-es_ES.po # Traducciones
-```
 
 ## Desarrollo
 
@@ -156,11 +151,7 @@ Para soporte técnico o reportar bugs:
 
 ### Sitios Amazon Soportados
 - **Amazon España** (.es) - Optimizado
-- **Amazon Francia** (.fr)
-- **Amazon Alemania** (.de)
-- **Amazon Reino Unido** (.co.uk)
-- **Amazon Italia** (.it)
-- **Amazon Estados Unidos** (.com)
+
 
 ### URLs Soportadas
 - URLs completas de Amazon
@@ -234,4 +225,4 @@ Desarrollado por **entreunosyceros.net** con enfoque en:
 
 Para más información y soporte técnico, visita [entreunosyceros.net](https://entreunosyceros.net).
 
-*Este plugin no está afiliado con Amazon. Este plugin solo se ha realizado a modo de prueba sin pretensiones ni garantías de ningún tipo*
+*Este plugin no está afiliado con Amazon de ninguna manera. Este plugin solo se ha realizado a modo de prueba sin pretensiones ni garantías de ningún tipo*

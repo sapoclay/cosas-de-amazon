@@ -1,6 +1,6 @@
 /**
  * Estilos para el plugin Cosas de Amazon
- * Version: 1.3.0
+ * Version: 2.10.4 - PROBLEMA ENCONTRADO: overflow hidden en contenedores padre
  */
 
 /* Contenedor principal del producto */
@@ -31,6 +31,7 @@
 .cosas-amazon-horizontal .cosas-amazon-image {
     flex-shrink: 0;
     width: 150px;
+    height: 300px; /* Aumentada la altura para mayor espacio de imagen */
 }
 
 .cosas-amazon-horizontal .cosas-amazon-content {
@@ -102,7 +103,7 @@
     flex-direction: column;
     min-height: 120px;
     max-width: 100%;
-    overflow: hidden;
+    overflow: visible !important;
     box-sizing: border-box;
     position: relative;
 }
@@ -125,35 +126,44 @@
 
 /* Contenedor principal con imagen a la izquierda y contenido a la derecha */
 .cosas-amazon-compact .cosas-amazon-main-content {
-    display: flex;
-    gap: 15px;
-    flex: 1;
-    order: 2;
+    display: flex !important;
+    gap: 15px !important;
+    flex: 1 !important;
+    order: 2 !important;
+    overflow: visible !important;
 }
 
-/* Imagen a la izquierda */
+/* Imagen a la izquierda - CORREGIDO: altura automática */
 .cosas-amazon-compact .cosas-amazon-image {
-    width: 70px;
-    height: 70px;
-    flex-shrink: 0;
-    overflow: hidden;
-    border-radius: 4px;
+    width: 70px !important;
+    height: 70px !important;
+    flex-shrink: 0 !important;
+    overflow: hidden !important;
+    border-radius: 4px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #f8f9fa !important;
 }
 
-.cosas-amazon-compact .cosas-amazon-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 4px;
+.cosas-amazon-product.cosas-amazon-compact .cosas-amazon-image img {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain !important;
+    object-position: center !important;
+    border-radius: 4px !important;
+    display: block !important;
 }
 
 /* Contenido a la derecha de la imagen */
 .cosas-amazon-compact .cosas-amazon-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    overflow: hidden;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    overflow: hidden !important;
 }
 
 .cosas-amazon-compact .cosas-amazon-description {
@@ -262,8 +272,14 @@
 }
 
 .cosas-amazon-compact.cosas-amazon-size-small .cosas-amazon-image {
-    width: 65px;
-    height: 65px;
+    width: 65px !important;
+    height: 90px !important; /* Aumentado de 65px a 90px para mayor altura */
+}
+
+.cosas-amazon-product.cosas-amazon-compact.cosas-amazon-size-small .cosas-amazon-image img {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
 }
 
 .cosas-amazon-compact.cosas-amazon-size-small .cosas-amazon-price {
@@ -286,8 +302,14 @@
 }
 
 .cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-image {
-    width: 100px;
-    height: 100px;
+    width: 100px !important;
+    height: 140px !important; /* Aumentado de 100px a 140px para mayor altura */
+}
+
+.cosas-amazon-product.cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-image img {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
 }
 
 .cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-price {
@@ -310,8 +332,14 @@
 }
 
 .cosas-amazon-compact.cosas-amazon-size-xlarge .cosas-amazon-image {
-    width: 120px;
-    height: 120px;
+    width: 120px !important;
+    height: 170px !important; /* Aumentado de 120px a 170px para mayor altura */
+}
+
+.cosas-amazon-product.cosas-amazon-compact.cosas-amazon-size-xlarge .cosas-amazon-image img {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
 }
 
 .cosas-amazon-compact.cosas-amazon-size-xlarge .cosas-amazon-price {
@@ -570,7 +598,7 @@
     align-items: center;
     flex-grow: 1;
     width: 100%;
-    padding-bottom: 70px;
+    padding-bottom: 95px;
 }
 
 /* Imagen en la parte superior */
@@ -849,6 +877,12 @@
     object-fit: cover;
 }
 
+/* Dimensiones específicas para imágenes de productos */
+.cosas-amazon-product .cosas-amazon-image img {
+    max-width: 150px !important;
+    max-height: 300px !important; /* Aumentado de 200px a 300px para mayor altura */
+}
+
 /* Contenido del producto */
 .cosas-amazon-content {
     display: flex;
@@ -1031,14 +1065,16 @@
 }
 
 /* Botón de Amazon */
-.cosas-amazon-button {
+.cosas-amazon-button,
+.amazon-button {
     margin-top: 15px;
 }
 
-.cosas-amazon-btn {
+.cosas-amazon-btn,
+.amazon-button {
     display: inline-block;
     background: #FF9900;
-    color: white;
+    color: white !important;
     padding: 12px 24px;
     text-decoration: none !important;
     border-radius: 6px;
@@ -1125,6 +1161,8 @@
     scroll-behavior: smooth;
     scrollbar-width: thin;
     scrollbar-color: #ccc #f0f0f0;
+    width: 100% !important; /* Ocupar todo el espacio disponible */
+    max-width: 100% !important;
 }
 
 .cosas-amazon-carousel::-webkit-scrollbar {
@@ -1145,10 +1183,27 @@
     background: #999;
 }
 
+/* Wrapper de alineación para carousel */
+.cosas-amazon-alignment-wrapper.aligncenter {
+    display: flex;
+    justify-content: center;
+}
+
+.cosas-amazon-alignment-wrapper.alignleft {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.cosas-amazon-alignment-wrapper.alignright {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .cosas-amazon-carousel-item {
     flex: 0 0 auto;
     width: 200px;
-    max-width: 200px;
+    min-width: 200px; /* Ancho mínimo para mantener legibilidad */
+    max-width: 250px; /* Ancho máximo para no ocupar demasiado espacio */
     background: #fff;
     border: 1px solid #e1e8ed;
     border-radius: 8px;
@@ -1177,12 +1232,17 @@
     align-items: center;
     justify-content: center;
     order: 1;
+    background: #f8f9fa; /* Fondo claro para contrastar */
+    border: 1px solid #e9ecef; /* Borde sutil */
 }
 
 .cosas-amazon-carousel-item .cosas-amazon-image img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain !important; /* Mantener proporción y centrar */
+    background: #f8f9fa; /* Fondo claro para contrastar */
+    max-height: 100% !important;
+    max-width: 60% !important;
 }
 
 /* Contenido estructurado */
@@ -1314,9 +1374,54 @@
     min-height: 32px;
 }
 
+/* Reglas responsivas para carousel */
+@media (max-width: 1200px) {
+    .cosas-amazon-carousel-item {
+        width: 180px;
+        min-width: 180px;
+        max-width: 220px;
+    }
+}
+
+@media (max-width: 768px) {
+    .cosas-amazon-carousel {
+        padding: 5px;
+        gap: 15px;
+    }
+    
+    .cosas-amazon-carousel-item {
+        width: 160px;
+        min-width: 160px;
+        max-width: 180px;
+        padding: 12px;
+    }
+    
+    .cosas-amazon-carousel-item .cosas-amazon-image {
+        height: 100px;
+    }
+}
+
+@media (max-width: 480px) {
+    .cosas-amazon-carousel {
+        padding: 5px;
+        gap: 10px;
+    }
+    
+    .cosas-amazon-carousel-item {
+        width: 140px;
+        min-width: 140px;
+        max-width: 160px;
+        padding: 10px;
+    }
+    
+    .cosas-amazon-carousel-item .cosas-amazon-image {
+        height: 80px;
+    }
+}
+
 /* Tabla comparativa */
 .cosas-amazon-table-container {
-    width: 100%;
+    width: 90%;
     margin: 20px 0;
     overflow-x: auto;
     border-radius: 8px;
@@ -1583,7 +1688,7 @@
 
 .cosas-amazon-table td img {
     max-width: 100px;
-    height: 100px;
+    height: 150px;
     object-fit: cover;
     border-radius: 4px;
     margin-bottom: 5px;
@@ -1707,9 +1812,10 @@
 
 /* Tamaño pequeño */
 .cosas-amazon-size-small {
-    padding: 12px;
-    margin: 12px 0;
-    max-width: 300px;
+    padding: 15px;
+    margin: 15px 0;
+    max-width: 350px;
+    overflow: hidden; /* Evitar que el contenido se salga */
 }
 
 .cosas-amazon-size-small .cosas-amazon-image {
@@ -1721,9 +1827,31 @@
     height: auto;
 }
 
+/* Truncar título en tamaño pequeño (GENERAL) */
 .cosas-amazon-size-small .cosas-amazon-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 1; /* Solo 1 línea para tamaño pequeño */
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    max-width: 100%;
     font-size: 14px;
+    line-height: 1.2;
     margin-bottom: 6px;
+    word-break: break-word;
+}
+
+/* Reposicionar etiqueta especial en tamaño pequeño */
+.cosas-amazon-size-small .cosas-amazon-special-offer {
+    order: 3; /* Mover después de la imagen */
+    margin: 8px 0 0 0;
+    text-align: center;
+}
+
+.cosas-amazon-size-small .cosas-amazon-special-offer span {
+    font-size: 11px;
+    padding: 4px 8px;
 }
 
 .cosas-amazon-size-small .cosas-amazon-description {
@@ -1749,6 +1877,431 @@
     font-size: 12px;
 }
 
+/* Combinación horizontal + small - ETIQUETA ANTES DEL BOTÓN */
+.cosas-amazon-horizontal.cosas-amazon-size-small {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    max-width: none;
+    width: fit-content;
+    min-width: 280px;
+    max-width: 450px;
+    gap: 15px;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-image {
+    order: 1; /* Columna izquierda */
+    display: block;
+    width: 100px;
+    min-width: 100px;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content {
+    order: 2; /* Después de imagen (1) */
+    flex: 1;
+    min-width: 0; /* Permitir que el contenido se ajuste */
+    display: flex; /* Hacer que el contenido sea flex para organizar sus hijos */
+    flex-direction: column; /* Organizar elementos en columna */
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-title {
+    font-size: 13px; /* Más pequeño en horizontal */
+    line-height: 1.2;
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 1; /* Solo 1 línea en horizontal small */
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    max-width: 100%;
+    word-break: break-word;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-description {
+    font-size: 12px;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2; /* Limitar a 2 líneas */
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-price {
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    order: 11; /* Después de la etiqueta (order 10) */
+}
+
+/* Orders específicos para elementos dentro del contenido en horizontal + small */
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-title {
+    order: 1; /* Título primero */
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-rating {
+    order: 2; /* Valoraciones segundo */
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-pricing {
+    order: 3; /* Precios tercero */
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-button {
+    order: 5; /* Botón al final */
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-special-offer {
+    order: 4; /* Entre precios (3) y botón (5) */
+    width: auto; /* Ancho automático para ajustarse al contenido */
+    margin: 8px 0 8px 0; /* Márgenes superior e inferior */
+    text-align: left; /* Alineado a la izquierda como el resto del contenido */
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-special-offer span {
+    font-size: 10px;
+    padding: 3px 6px;
+    display: block;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+/* Combinación horizontal + medium - Frontend */
+.cosas-amazon-horizontal.cosas-amazon-size-medium {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 20px; /* Más gap que small */
+    max-width: 550px; /* Más ancho que small (450px) */
+    min-width: 380px; /* Más ancho que small (280px) */
+    width: fit-content;
+    padding: 20px; /* Más padding que small (15px) */
+    margin: 20px 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image {
+    order: 1;
+    display: block;
+    width: 140px; /* Más grande que small (100px) */
+    min-width: 140px;
+    flex-shrink: 0;
+    flex-basis: 140px;
+    max-width: 140px;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content {
+    order: 2;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 10px; /* Más gap que small (8px) */
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: auto;
+    min-width: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-title {
+    order: 1;
+    font-size: 16px; /* Más grande que small (14px) */
+    line-height: 1.3;
+    margin: 0;
+    max-height: 2.6em; /* 2 líneas */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-description {
+    display: none; /* Ocultar descripción en horizontal medium */
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-rating {
+    order: 2;
+    font-size: 13px; /* Más grande que small (12px) */
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-pricing {
+    order: 3;
+    font-size: 15px; /* Más grande que small (13px) */
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-special-offer {
+    order: 4; /* Entre precios (3) y botón (5) */
+    width: auto;
+    margin: 8px 0;
+    text-align: left;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-special-offer span {
+    font-size: 11px; /* Más grande que small (10px) */
+    padding: 4px 8px; /* Más padding que small (3px 6px) */
+    display: block;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-button {
+    order: 5;
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-btn {
+    font-size: 14px; /* Más grande que small (12px) */
+    padding: 10px 16px; /* Más padding que small (8px 12px) */
+    min-height: 40px; /* Más alto que small (32px) */
+    border-radius: 5px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Combinación horizontal + large - Frontend */
+.cosas-amazon-horizontal.cosas-amazon-size-large {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 25px; /* Más gap que medium (20px) */
+    max-width: 700px; /* Más ancho que medium (550px) */
+    min-width: 500px; /* Más ancho que medium (380px) */
+    width: fit-content;
+    padding: 24px; /* Más padding que medium (20px) */
+    margin: 24px 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image {
+    order: 2; /* IMAGEN A LA DERECHA para large */
+    display: block;
+    width: 180px; /* Más grande que medium (140px) */
+    min-width: 180px;
+    flex-shrink: 0;
+    flex-basis: 180px;
+    max-width: 180px;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content {
+    order: 1; /* CONTENIDO A LA IZQUIERDA para large */
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 12px; /* Más gap que medium (10px) */
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: auto;
+    min-width: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-title {
+    order: 1;
+    font-size: 18px; /* Más grande que medium (16px) */
+    line-height: 1.3;
+    margin: 0;
+    max-height: 2.6em; /* 2 líneas */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-description {
+    order: 1.5; /* Entre título y rating */
+    font-size: 14px;
+    line-height: 1.4;
+    margin: 0;
+    max-height: 2.8em; /* 2 líneas */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    color: #666;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-rating {
+    order: 2;
+    font-size: 14px; /* Más grande que medium (13px) */
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-pricing {
+    order: 3;
+    font-size: 17px; /* Más grande que medium (15px) */
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-special-offer {
+    order: 4; /* Entre precios (3) y botón (5) */
+    width: auto;
+    margin: 10px 0; /* Más margen que medium (8px) */
+    text-align: left;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-special-offer span {
+    font-size: 12px; /* Más grande que medium (11px) */
+    padding: 5px 10px; /* Más padding que medium (4px 8px) */
+    display: block;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-button {
+    order: 5;
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-btn {
+    font-size: 16px; /* Más grande que medium (14px) */
+    padding: 12px 20px; /* Más padding que medium (10px 16px) */
+    min-height: 48px; /* Más alto que medium (40px) */
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Combinación horizontal + xlarge - Frontend */
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 30px; /* Más gap que large (25px) */
+    max-width: 850px; /* Más ancho que large (700px) */
+    min-width: 600px; /* Más ancho que large (500px) */
+    width: fit-content;
+    padding: 30px; /* Más padding que large (24px) */
+    margin: 30px 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image {
+    order: 1;
+    display: block;
+    width: 220px; /* Más grande que large (180px) */
+    min-width: 220px;
+    flex-shrink: 0;
+    flex-basis: 220px;
+    max-width: 220px;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content {
+    order: 2;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 15px; /* Más gap que large (12px) */
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: auto;
+    min-width: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-title {
+    order: 1;
+    font-size: 22px; /* Más grande que large (18px) */
+    line-height: 1.3;
+    margin: 0;
+    max-height: 2.6em; /* 2 líneas */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-description {
+    order: 1.5; /* Entre título y rating */
+    font-size: 16px; /* Más grande que large (14px) */
+    line-height: 1.5;
+    margin: 0;
+    max-height: 4.5em; /* 3 líneas para xlarge */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    color: #666;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-rating {
+    order: 2;
+    font-size: 16px; /* Más grande que large (14px) */
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-pricing {
+    order: 3;
+    font-size: 20px; /* Más grande que large (17px) */
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-special-offer {
+    order: 4; /* Entre precios (3) y botón (5) */
+    width: auto;
+    margin: 12px 0; /* Más margen que large (10px) */
+    text-align: left;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-special-offer span {
+    font-size: 14px; /* Más grande que large (12px) */
+    padding: 6px 12px; /* Más padding que large (5px 10px) */
+    display: block;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-button {
+    order: 5;
+    margin: 0;
+}
+
+.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-btn {
+    font-size: 20px; /* Aumentar de 18px a 20px */
+    padding: 18px 30px; /* Aumentar de 15px 25px a 18px 30px */
+    min-height: 58px; /* Aumentar de 54px a 58px */
+    border-radius: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Combinación vertical + small */
+.cosas-amazon-vertical.cosas-amazon-size-small {
+    text-align: center;
+    max-width: 280px; /* Más estrecho para vertical */
+}
+
+.cosas-amazon-vertical.cosas-amazon-size-small .cosas-amazon-image {
+    width: 120px; /* Imagen un poco más grande en vertical */
+    margin: 0 auto 10px auto;
+}
+
+.cosas-amazon-vertical.cosas-amazon-size-small .cosas-amazon-special-offer {
+    margin: 8px 0;
+}
+
 /* Tamaño mediano (por defecto) */
 .cosas-amazon-size-medium {
     padding: 20px;
@@ -1758,6 +2311,7 @@
 
 .cosas-amazon-size-medium .cosas-amazon-image {
     width: 150px;
+    height: auto; 
 }
 
 .cosas-amazon-size-medium .cosas-amazon-title {
@@ -1849,7 +2403,7 @@
 }
 
 .cosas-amazon-size-xlarge .cosas-amazon-title {
-    font-size: 26px;
+    font-size: 14px;
     margin-bottom: 16px;
 }
 
@@ -1883,7 +2437,7 @@
 }
 
 .cosas-amazon-vertical.cosas-amazon-size-medium .cosas-amazon-image {
-    width: 180px;
+    width: auto;
     margin: 0 auto 15px;
 }
 
@@ -1915,10 +2469,54 @@
 
 /* Estilos para múltiples productos en grid */
 .cosas-amazon-multiple-products {
-    display: grid;
-    gap: 20px;
-    width: 100%;
+    display: grid !important;
+    gap: 20px !important;
+    width: 100% !important;
+    grid-template-columns: repeat(2, 1fr) !important; /* Por defecto 2 columnas */
 }
+
+/* Reglas específicas para diferentes números de columnas */
+.cosas-amazon-multiple-products.cosas-amazon-grid-2-cols {
+    grid-template-columns: repeat(2, 1fr) !important;
+}
+
+.cosas-amazon-multiple-products.cosas-amazon-grid-3-cols {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+/* Fuerza específica para horizontal small - asegurar 2 columnas (ORIGINAL) */
+.cosas-amazon-multiple-products:has(.cosas-amazon-horizontal.cosas-amazon-size-small) {
+    grid-template-columns: repeat(2, 1fr) !important;
+}
+
+/* Fuerza específica para vertical small - asegurar 3 columnas */
+.cosas-amazon-multiple-products:has(.cosas-amazon-vertical.cosas-amazon-size-small) {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+/* Fuerza específica para vertical medium - asegurar 3 columnas */
+.cosas-amazon-multiple-products:has(.cosas-amazon-vertical.cosas-amazon-size-medium) {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+/* Fuerza específica para minimal - SIEMPRE máximo 3 columnas */
+.cosas-amazon-multiple-products:has(.cosas-amazon-minimal.cosas-amazon-size-small) {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.cosas-amazon-multiple-products:has(.cosas-amazon-minimal.cosas-amazon-size-medium) {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.cosas-amazon-multiple-products:has(.cosas-amazon-minimal.cosas-amazon-size-large) {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.cosas-amazon-multiple-products:has(.cosas-amazon-minimal.cosas-amazon-size-xlarge) {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+/* RESTO DE REGLAS GENERALES DE GRID (sin cambios) */
 
 /* Tarjetas horizontales en grid */
 .cosas-amazon-multiple-products .cosas-amazon-horizontal {
@@ -1963,6 +2561,445 @@
     margin-top: auto;
 }
 
+/* SOBRESCRIBIR REGLAS GENERALES CON ESPECÍFICAS PARA SMALL (mayor especificidad) */
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 12px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: auto !important; /* Sobrescribir min-height: 120px */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-image {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+    width: 70px !important;
+    min-width: 70px !important;
+    max-width: 70px !important;
+    margin: 0 !important; /* Sobrescribir margin-right: 15px */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-image img {
+    width: 70px !important;
+    height: 70px !important;
+    object-fit: cover !important;
+    border-radius: 4px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content {
+    order: 2 !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    min-width: 0 !important;
+    width: auto !important;
+    height: auto !important; /* Sobrescribir height: 100% */
+    justify-content: flex-start !important; /* Sobrescribir space-between */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-title {
+    order: 1 !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    margin: 0 !important; /* Sobrescribir margin-bottom: 8px */
+    max-height: 2.4em !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-rating {
+    order: 2 !important;
+    font-size: 10px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-pricing {
+    order: 3 !important;
+    font-size: 12px !important;
+    margin: 0 !important; /* Sobrescribir margin: 8px 0 */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-price {
+    font-size: 13px !important;
+    font-weight: bold !important;
+    color: #B12704 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-special-offer {
+    order: 4 !important;
+    margin: 4px 0 !important;
+    text-align: left !important;
+    flex-shrink: 0 !important;
+    align-self: flex-start !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-special-offer span {
+    font-size: 9px !important;
+    padding: 2px 5px !important;
+    border-radius: 2px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-button {
+    order: 5 !important;
+    margin: 0 !important; /* Sobrescribir margin-top: auto */
+    margin-top: auto !important; /* Pero mantener empujado al final */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-btn {
+    font-size: 10px !important;
+    padding: 6px 10px !important;
+    min-height: 28px !important;
+    border-radius: 3px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+}
+
+/* Ocultar descripción en grid horizontal + small para ahorrar espacio */
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-description {
+    display: none !important;
+}
+
+/* ========================================
+ * REGLAS ESPECÍFICAS PARA HORIZONTAL + MEDIUM EN GRID DE 2 COLUMNAS
+ * ======================================== */
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 15px !important;
+    padding: 15px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: auto !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image {
+    order: 1 !important;
+    width: 120px !important; /* Tamaño optimizado para grid */
+    min-width: 120px !important;
+    max-width: 120px !important;
+    flex-shrink: 0 !important;
+    flex-basis: 120px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image img {
+    width: 120px !important;
+    height: auto !important;
+    max-width: 120px !important;
+    object-fit: contain !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content {
+    order: 2 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    gap: 6px !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-title {
+    order: 1 !important;
+    font-size: 13px !important;
+    line-height: 1.3 !important;
+    margin: 0 !important;
+    font-weight: 600 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-rating {
+    order: 2 !important;
+    font-size: 10px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-pricing {
+    order: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-price {
+    font-size: 12px !important;
+    margin: 0 !important;
+    font-weight: bold !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-special-offer {
+    order: 4 !important;
+    font-size: 9px !important;
+    padding: 2px 5px !important;
+    border-radius: 3px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-special-offer span {
+    font-size: 9px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-button {
+    order: 5 !important;
+    margin: 6px 0 0 0 !important;
+    width: 100% !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-btn {
+    font-size: 10px !important;
+    padding: 6px 10px !important;
+    min-height: 30px !important;
+    border-radius: 3px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-description {
+    display: none !important; /* Ocultar descripción en grid para mantener layout limpio */
+}
+
+/* ========================================
+ * REGLAS ESPECÍFICAS PARA HORIZONTAL + LARGE EN GRID DE 2 COLUMNAS
+ * ======================================== */
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 20px !important;
+    padding: 18px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: auto !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image {
+    order: 2 !important; /* IMAGEN A LA DERECHA en grid large */
+    width: 140px !important; /* Tamaño intermedio para grid */
+    min-width: 140px !important;
+    max-width: 140px !important;
+    flex-shrink: 0 !important;
+    flex-basis: 140px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image img {
+    width: 140px !important;
+    height: auto !important;
+    max-width: 140px !important;
+    object-fit: contain !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content {
+    order: 1 !important; /* CONTENIDO A LA IZQUIERDA en grid large */
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    gap: 8px !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-title {
+    order: 1 !important;
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+    margin: 0 !important;
+    font-weight: 600 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-rating {
+    order: 2 !important;
+    font-size: 11px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-pricing {
+    order: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-price {
+    font-size: 13px !important;
+    margin: 0 !important;
+    font-weight: bold !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-special-offer {
+    order: 4 !important;
+    font-size: 10px !important;
+    padding: 3px 6px !important;
+    border-radius: 3px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-special-offer span {
+    font-size: 10px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-button {
+    order: 5 !important;
+    margin: 8px 0 0 0 !important;
+    width: 100% !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-btn {
+    font-size: 11px !important;
+    padding: 8px 12px !important;
+    min-height: 32px !important;
+    border-radius: 4px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-description {
+    display: none !important; /* Ocultar descripción en grid para mantener layout limpio */
+}
+
+/* ========================================
+ * REGLAS ESPECÍFICAS PARA HORIZONTAL + XLARGE EN GRID DE 2 COLUMNAS
+ * ======================================== */
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 25px !important;
+    padding: 24px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: auto !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image {
+    order: 1 !important;
+    width: 180px !important; /* Tamaño más grande para xlarge */
+    min-width: 180px !important;
+    max-width: 180px !important;
+    flex-shrink: 0 !important;
+    flex-basis: 180px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image img {
+    width: 180px !important;
+    height: auto !important;
+    max-width: 180px !important;
+    object-fit: contain !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content {
+    order: 2 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    gap: 12px !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-title {
+    order: 1 !important;
+    font-size: 16px !important;
+    line-height: 1.3 !important;
+    margin: 0 !important;
+    font-weight: 600 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-rating {
+    order: 2 !important;
+    font-size: 12px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-pricing {
+    order: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-price {
+    font-size: 15px !important;
+    margin: 0 !important;
+    font-weight: bold !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-special-offer {
+    order: 4 !important;
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    margin: 0 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-special-offer span {
+    font-size: 11px !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-button {
+    order: 5 !important;
+    margin: 12px 0 0 0 !important;
+    width: 100% !important;
+    display: flex !important; /* Asegurar que es flex */
+    justify-content: stretch !important; /* Estirar el botón */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-btn {
+    font-size: 16px !important;
+    padding: 15px 25px !important;
+    min-height: 48px !important;
+    border-radius: 6px !important;
+    width: 100% !important;
+    min-width: 200px !important; /* Forzar ancho mínimo */
+    box-sizing: border-box !important;
+    text-align: center !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-description {
+    display: none !important; /* Ocultar descripción en grid para mantener layout limpio */
+}
+
 /* Tarjetas verticales en grid */
 .cosas-amazon-multiple-products .cosas-amazon-vertical {
     display: flex !important;
@@ -1996,6 +3033,56 @@
 
 .cosas-amazon-multiple-products .cosas-amazon-vertical .cosas-amazon-button {
     margin-top: auto;
+}
+
+/* Tarjetas minimal en grid */
+.cosas-amazon-multiple-products .cosas-amazon-minimal {
+    display: flex !important;
+    flex-direction: column !important;
+    text-align: center !important;
+    padding: 12px;
+    min-height: 200px;
+    max-width: none !important; /* Anular max-width para que ocupe el espacio del grid */
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-main-content {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-image {
+    margin-bottom: 10px !important;
+    align-self: center;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-image img {
+    max-width: 100% !important;
+    height: auto !important;
+    object-fit: contain;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-title {
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.2;
+    text-align: center;
+    order: 1 !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-content {
+    align-items: center !important;
+    text-align: center !important;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-price {
+    margin: 8px 0;
+    text-align: center;
+}
+
+.cosas-amazon-multiple-products .cosas-amazon-minimal .cosas-amazon-btn {
+    margin-top: auto;
+    width: 100%;
 }
 
 /* Responsive para grid */

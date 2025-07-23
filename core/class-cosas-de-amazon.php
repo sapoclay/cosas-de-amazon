@@ -89,19 +89,45 @@ class CosasDeAmazon {
     }
 
     public function enqueue_frontend_assets() {
+        // Obtener versión de assets para cache busting
+        $asset_version = get_option('cosas_amazon_asset_version', COSAS_AMAZON_VERSION);
+        
+        // En producción, usar versión con timestamp para evitar cache
+        $production_config = get_option('cosas_amazon_production_config', []);
+        if (!empty($production_config['production_mode']) || !WP_DEBUG) {
+            $asset_version = COSAS_AMAZON_VERSION . '-' . time();
+        }
+        
         wp_enqueue_style(
             'cosas-amazon-block-style',
             COSAS_AMAZON_PLUGIN_URL . 'assets/css/style.css',
             array(),
-            COSAS_AMAZON_VERSION
+            $asset_version
         );
+        
+        wp_enqueue_script(
+            'cosas-amazon-frontend',
+            COSAS_AMAZON_PLUGIN_URL . 'assets/js/frontend.js',
+            array('jquery'),
+            $asset_version,
+            true
+        );
+        
         wp_enqueue_script(
             'cosas-amazon-carousel',
             COSAS_AMAZON_PLUGIN_URL . 'assets/js/carousel.js',
-            array(),
-            COSAS_AMAZON_VERSION,
+            array('jquery'),
+            $asset_version,
             true
         );
+        
+        // Pasar configuración al JavaScript
+        wp_localize_script('cosas-amazon-frontend', 'cosasAmazonConfig', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cosas_amazon_nonce'),
+            'trackClicks' => get_option('cosas_amazon_options')['track_clicks'] ?? true,
+            'forceButtons' => !empty($production_config['force_button_display'])
+        ));
     }
 
     public function enqueue_block_editor_assets() {
@@ -109,7 +135,7 @@ class CosasDeAmazon {
             'cosas-amazon-block-editor',
             COSAS_AMAZON_PLUGIN_URL . 'assets/js/block.js',
             array('wp-blocks', 'wp-i18n', 'wp-element', 'wp-components', 'wp-block-editor', 'wp-api-fetch'),
-            COSAS_AMAZON_VERSION,
+            COSAS_AMAZON_VERSION . '-' . time(), // Forzar recarga JS también
             true
         );
         $plugin_options = get_option('cosas_amazon_options', array());
@@ -136,12 +162,31 @@ class CosasDeAmazon {
                 'showRatings' => get_theme_mod('cosas_amazon_show_ratings', true),
             )
         ));
+        
+        // Cargar CSS del editor con alta prioridad
         wp_enqueue_style(
             'cosas-amazon-block-editor-style',
             COSAS_AMAZON_PLUGIN_URL . 'assets/css/editor.css',
-            array('wp-edit-blocks'),
-            COSAS_AMAZON_VERSION
+            array('wp-edit-blocks', 'wp-block-editor', 'wp-block-library'),
+            COSAS_AMAZON_VERSION . '-' . time(), // Forzar recarga con timestamp
+            'all'
         );
+        
+        // Inyectar CSS personalizado del usuario en el editor
+        $this->inject_custom_css_in_editor();
+    }
+    
+    /**
+     * Función para inyectar CSS personalizado en el editor de bloques
+     */
+    private function inject_custom_css_in_editor() {
+        $custom_css = get_option('cosas_amazon_custom_css', '');
+        if (!empty($custom_css)) {
+            wp_add_inline_style(
+                'cosas-amazon-block-editor-style',
+                "/* CSS Personalizado del Usuario en Editor */\n" . $custom_css
+            );
+        }
     }
 
     /**
@@ -162,6 +207,83 @@ class CosasDeAmazon {
         $product_data = isset($merged_attributes['productData']) ? $merged_attributes['productData'] : array();
         $products_data = isset($merged_attributes['productsData']) ? $merged_attributes['productsData'] : array();
         $multiple_products_mode = isset($merged_attributes['multipleProductsMode']) ? $merged_attributes['multipleProductsMode'] : false;
+        $products_per_row = isset($merged_attributes['productsPerRow']) ? $merged_attributes['productsPerRow'] : 2;
+        
+        // LIMITACIONES PROGRESIVAS PARA ESTILOS HORIZONTAL, COMPACTA, VERTICAL Y MINIMAL
+        if ($display_style === 'horizontal' || $display_style === 'compact' || $display_style === 'vertical' || $display_style === 'minimal') {
+            // Determinar límites según el estilo y tamaño
+            if ($display_style === 'horizontal') {
+                switch($block_size) {
+                    case 'xlarge':
+                    case 'large':
+                        $max_products = 2;
+                        $max_urls = 1; // 1 principal + 1 adicional = 2 total
+                        break;
+                    case 'medium':
+                        $max_products = 3;
+                        $max_urls = 2; // 1 principal + 2 adicionales = 3 total
+                        break;
+                    case 'small':
+                        $max_products = 4;
+                        $max_urls = 3; // 1 principal + 3 adicionales = 4 total
+                        break;
+                    default:
+                        $max_products = 4; // Nunca 5 para horizontal
+                        $max_urls = 3;
+                        break;
+                }
+            } elseif ($display_style === 'compact' || $display_style === 'vertical') {
+                // COMPACTA Y VERTICAL tienen limitaciones progresivas
+                switch($block_size) {
+                    case 'xlarge':
+                    case 'large':
+                        $max_products = 2;
+                        $max_urls = 1; // 1 principal + 1 adicional = 2 total
+                        break;
+                    case 'medium':
+                    case 'small':
+                        $max_products = 3;
+                        $max_urls = 2; // 1 principal + 2 adicionales = 3 total
+                        break;
+                    default:
+                        $max_products = 3; // Máximo 3 para compacta/vertical por defecto
+                        $max_urls = 2;
+                        break;
+                }
+            } elseif ($display_style === 'minimal') {
+                // MINIMAL tiene limitaciones específicas: siempre 3 productos máximo
+                switch($block_size) {
+                    case 'xlarge':
+                    case 'large':
+                        $max_products = 3; // Para minimal: xlarge/large = 3 productos máximo
+                        $max_urls = 2; // 1 principal + 2 adicionales = 3 total
+                        break;
+                    case 'medium':
+                    case 'small':
+                        $max_products = 3; // Para minimal: medium/small = 3 productos máximo
+                        $max_urls = 2; // 1 principal + 2 adicionales = 3 total
+                        break;
+                    default:
+                        $max_products = 3; // Máximo 3 para minimal siempre
+                        $max_urls = 2;
+                        break;
+                }
+            }
+            
+            // Limitar URLs adicionales según el tamaño
+            if (is_array($amazon_urls) && count($amazon_urls) > $max_urls) {
+                $amazon_urls = array_slice($amazon_urls, 0, $max_urls);
+                $merged_attributes['amazonUrls'] = $amazon_urls;
+                error_log(strtoupper($block_size) . ' ' . strtoupper($display_style) . ': Limitando URLs adicionales a ' . $max_urls . ' máximo (' . ($max_urls + 1) . ' productos total)');
+            }
+            
+            // Limitar productos por fila según el tamaño
+            if ($products_per_row > $max_products) {
+                $products_per_row = $max_products;
+                $merged_attributes['productsPerRow'] = $max_products;
+                error_log(strtoupper($block_size) . ' ' . strtoupper($display_style) . ': Limitando productos por fila a ' . $max_products . ' máximo');
+            }
+        }
         
         // NUEVA LÓGICA: Obtener datos del producto automáticamente si no están disponibles
         if (empty($product_data) && !empty($amazon_url)) {
@@ -240,6 +362,10 @@ class CosasDeAmazon {
     private function merge_attributes_with_defaults($block_attributes, $global_defaults) {
         $merged = array();
         
+        // Verificar configuración de producción
+        $production_config = get_option('cosas_amazon_production_config', []);
+        $force_button_display = !empty($production_config['force_button_display']);
+        
         // Lista de atributos que deben aplicar configuración global si no se han modificado
         $configurable_attributes = array(
             'displayStyle', 'blockSize', 'showPrice', 'showDiscount', 'showDescription',
@@ -256,6 +382,28 @@ class CosasDeAmazon {
                 // Usar configuración global por defecto
                 $merged[$attr] = isset($global_defaults[$attr]) ? $global_defaults[$attr] : $block_attributes[$attr];
             }
+            
+            // CONFIGURACIÓN ESPECÍFICA PARA PRODUCCIÓN: Forzar botón si está habilitado
+            if ($attr === 'showButton' && $force_button_display) {
+                $merged[$attr] = true;
+            }
+            if ($attr === 'buttonText' && ($force_button_display || empty($merged[$attr]))) {
+                $merged[$attr] = isset($global_defaults[$attr]) ? $global_defaults[$attr] : 'Ver en Amazon';
+            }
+        }
+        
+        // GARANTÍA DE BOTÓN EN PRODUCCIÓN: Asegurar que showButton esté siempre true en producción
+        $options = get_option('cosas_amazon_options', []);
+        $default_show_button = isset($options['show_button_by_default']) ? $options['show_button_by_default'] : true;
+        
+        // Si no está definido o está vacío, forzar a true
+        if (!isset($merged['showButton']) || $merged['showButton'] === false || $merged['showButton'] === null) {
+            $merged['showButton'] = $default_show_button;
+        }
+        
+        // Si no hay texto de botón, asegurar que tenga uno
+        if (!isset($merged['buttonText']) || empty($merged['buttonText'])) {
+            $merged['buttonText'] = isset($options['default_button_text']) ? $options['default_button_text'] : 'Ver en Amazon';
         }
         
         // Mantener atributos que no son configurables globalmente
@@ -335,17 +483,33 @@ class CosasDeAmazon {
         
         // Estructura según el estilo
         if ($attributes['displayStyle'] === 'horizontal') {
-            $html .= '<div class="cosas-amazon-image">';
-            if (!empty($product_data['image'])) {
-                $html .= '<img src="' . esc_url($product_data['image']) . '" alt="' . esc_attr($product_data['title']) . '" />';
+            // Para horizontal + small/medium/large/xlarge, usar estructura especial con contenedor de contenido
+            if (in_array($attributes['blockSize'], array('small', 'medium', 'large', 'xlarge'))) {
+                // Imagen del producto (columna izquierda)
+                $html .= '<div class="cosas-amazon-image">';
+                if (!empty($product_data['image'])) {
+                    $html .= '<img src="' . esc_url($product_data['image']) . '" alt="' . esc_attr($product_data['title']) . '" />';
+                }
+                $html .= '</div>';
+                
+                // Contenedor de contenido (columna derecha)
+                $html .= '<div class="cosas-amazon-content">';
+                $html .= $this->render_product_content($product_data, $attributes, $amazon_url);
+                $html .= '</div>';
+            } else {
+                // Estructura original para otros tamaños horizontales
+                $html .= '<div class="cosas-amazon-image">';
+                if (!empty($product_data['image'])) {
+                    $html .= '<img src="' . esc_url($product_data['image']) . '" alt="' . esc_attr($product_data['title']) . '" />';
+                }
+                $html .= '</div>';
+                
+                $html .= '<div class="cosas-amazon-content">';
+                // Añadir etiqueta de oferta especial al inicio del contenido
+                $html .= $this->render_special_offer_tag($product_data, $attributes);
+                $html .= $this->render_product_content($product_data, $attributes, $amazon_url, false);
+                $html .= '</div>';
             }
-            $html .= '</div>';
-            
-            $html .= '<div class="cosas-amazon-content">';
-            // Añadir etiqueta de oferta especial al inicio del contenido
-            $html .= $this->render_special_offer_tag($product_data, $attributes);
-            $html .= $this->render_product_content($product_data, $attributes, $amazon_url);
-            $html .= '</div>';
             
         } elseif ($attributes['displayStyle'] === 'compact') {
             // Para estilo compacto: título arriba, luego main-content con imagen a la izquierda y contenido a la derecha
@@ -580,11 +744,29 @@ class CosasDeAmazon {
             
         } elseif ($attributes['displayStyle'] === 'carousel') {
             // Para carousel individual (cuando solo hay un producto)
-            $html = '<div class="cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . '">';
-            $html .= $this->render_carousel_item($product_data, $amazon_url, $attributes);
-            $html .= '</div>';
+            // Aplicar wrapper de alineación igual que otros estilos
+            $wrapper_styles = 'display: flex; width: 100%; ';
+            switch ($attributes['alignment']) {
+                case 'left':
+                    $wrapper_styles .= 'justify-content: flex-start;';
+                    break;
+                case 'right':
+                    $wrapper_styles .= 'justify-content: flex-end;';
+                    break;
+                case 'center':
+                default:
+                    $wrapper_styles .= 'justify-content: center;';
+                    break;
+            }
             
-            return $html; // Retornar directamente sin wrapper adicional
+            $alignment_class = 'cosas-amazon-align-' . esc_attr($attributes['alignment']);
+            $html = '<div style="' . esc_attr($wrapper_styles) . '">';
+            $html .= '<div class="cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . ' ' . $alignment_class . '">';
+            $html .= $this->render_carousel_item($product_data, $amazon_url, $attributes);
+            $html .= '</div>'; // Cerrar carousel
+            $html .= '</div>'; // Cerrar wrapper
+            
+            return $html;
             
         } else {
             // Vertical y otros estilos
@@ -596,7 +778,7 @@ class CosasDeAmazon {
             
             // Añadir etiqueta de oferta especial entre imagen y título
             $html .= $this->render_special_offer_tag($product_data, $attributes);
-            $html .= $this->render_product_content($product_data, $attributes, $amazon_url);
+            $html .= $this->render_product_content($product_data, $attributes, $amazon_url, false);
         }
         
         $html .= '</div>'; // Cerrar contenedor del producto
@@ -608,7 +790,7 @@ class CosasDeAmazon {
     /**
      * Renderizar el contenido del producto (sin imagen)
      */
-    private function render_product_content($product_data, $attributes, $amazon_url) {
+    private function render_product_content($product_data, $attributes, $amazon_url, $include_special_offer_tag = true) {
         $html = '';
         
         // Título del producto
@@ -654,6 +836,11 @@ class CosasDeAmazon {
             $html .= '</div>';
         }
         
+        // Etiqueta de oferta especial (DENTRO del contenido solo si no se ha incluido antes)
+        if ($include_special_offer_tag) {
+            $html .= $this->render_special_offer_tag($product_data, $attributes);
+        }
+        
         // Descripción del producto
         if ($attributes['showDescription'] && !empty($product_data['description'])) {
             $description = $product_data['description'];
@@ -685,7 +872,27 @@ class CosasDeAmazon {
             return '<div class="cosas-amazon-error">No hay URLs disponibles para el carousel.</div>';
         }
         
-        $html = '<div class="cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . '">';
+        // Estilos del wrapper con alineación (igual que otros estilos)
+        $wrapper_styles = 'display: flex; width: 100%; ';
+        switch ($attributes['alignment']) {
+            case 'left':
+                $wrapper_styles .= 'justify-content: flex-start;';
+                break;
+            case 'right':
+                $wrapper_styles .= 'justify-content: flex-end;';
+                break;
+            case 'center':
+            default:
+                $wrapper_styles .= 'justify-content: center;';
+                break;
+        }
+        
+        // Crear el wrapper con alineación
+        $html = '<div style="' . esc_attr($wrapper_styles) . '">';
+        
+        // Crear el contenedor del carousel con clase de alineación
+        $alignment_class = 'cosas-amazon-align-' . esc_attr($attributes['alignment']);
+        $html .= '<div class="cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . ' ' . $alignment_class . '">';
         
         foreach ($urls_array as $index => $url) {
             $product_data = null;
@@ -706,7 +913,8 @@ class CosasDeAmazon {
             }
         }
         
-        $html .= '</div>';
+        $html .= '</div>'; // Cerrar carousel
+        $html .= '</div>'; // Cerrar wrapper
         
         return $html;
     }
@@ -822,7 +1030,39 @@ class CosasDeAmazon {
         
         $products_per_row = $attributes['productsPerRow'];
         
-        $html = '<div class="cosas-amazon-products-grid" style="display: grid; grid-template-columns: repeat(' . $products_per_row . ', 1fr); gap: 20px; margin: 20px 0;">';
+        // FORZAR productsPerRow = 2 para horizontal + small/medium/large/xlarge (reglas originales)
+        if (isset($attributes['displayStyle']) && $attributes['displayStyle'] === 'horizontal' && 
+            isset($attributes['blockSize']) && in_array($attributes['blockSize'], ['small', 'medium', 'large', 'xlarge'])) {
+            $products_per_row = 2;
+        }
+        
+        // NUEVAS LIMITACIONES PROGRESIVAS PARA VERTICAL, COMPACTA Y MINIMAL
+        if (isset($attributes['displayStyle']) && isset($attributes['blockSize'])) {
+            $display_style = $attributes['displayStyle'];
+            $block_size = $attributes['blockSize'];
+            
+            if ($display_style === 'compact' || $display_style === 'vertical') {
+                // Compacta y Vertical: xlarge/large=2, medium/small=3
+                switch($block_size) {
+                    case 'xlarge':
+                    case 'large':
+                        $products_per_row = 2;
+                        break;
+                    case 'medium':
+                    case 'small':
+                        $products_per_row = 3;
+                        break;
+                }
+            } elseif ($display_style === 'minimal') {
+                // Minimal: siempre 3 productos máximo para todos los tamaños
+                $products_per_row = 3;
+            }
+        }
+        
+        // Agregar clase específica para el número de columnas
+        $grid_class = 'cosas-amazon-grid-' . $products_per_row . '-cols';
+        
+        $html = '<div class="cosas-amazon-multiple-products ' . $grid_class . '" style="display: grid !important; grid-template-columns: repeat(' . $products_per_row . ', 1fr) !important; gap: 20px !important; margin: 20px 0;">';
         
         foreach ($products_data as $index => $product_data) {
             // Normalizar los datos del producto
@@ -1092,5 +1332,37 @@ class CosasDeAmazon {
         }
         
         return '';
+    }
+    
+    /**
+     * Función para el shortcode [amazon_producto]
+     */
+    public function shortcode_amazon_producto($atts) {
+        // Atributos por defecto del shortcode
+        $attributes = shortcode_atts(array(
+            'url' => '',
+            'style' => 'horizontal',
+            'size' => 'medium',
+            'show_button' => true,
+            'button_text' => 'Ver en Amazon',
+            'show_price' => true,
+            'show_discount' => true,
+            'show_description' => true
+        ), $atts, 'amazon_producto');
+        
+        // Convertir a formato del bloque
+        $block_attributes = array(
+            'amazonUrl' => $attributes['url'],
+            'displayStyle' => $attributes['style'],
+            'blockSize' => $attributes['size'],
+            'showButton' => filter_var($attributes['show_button'], FILTER_VALIDATE_BOOLEAN),
+            'buttonText' => $attributes['button_text'],
+            'showPrice' => filter_var($attributes['show_price'], FILTER_VALIDATE_BOOLEAN),
+            'showDiscount' => filter_var($attributes['show_discount'], FILTER_VALIDATE_BOOLEAN),
+            'showDescription' => filter_var($attributes['show_description'], FILTER_VALIDATE_BOOLEAN)
+        );
+        
+        // Usar la misma función de renderizado que el bloque
+        return $this->render_amazon_product_block($block_attributes);
     }
 }

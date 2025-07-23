@@ -3,12 +3,63 @@
     
     $(document).ready(function() {
         
-        // Manejar clicks en botones de Amazon
-        $('.cosas-de-amazon-block .amazon-button').on('click', function(e) {
+        // Verificar que los botones existen y tienen URLs
+        function initializeAmazonButtons() {
+            $('.cosas-de-amazon-block').each(function() {
+                const $block = $(this);
+                const $button = $block.find('.amazon-button');
+                const amazonUrl = $block.data('amazon-url') || $block.attr('data-amazon-url');
+                
+                // Si no hay botón pero hay URL, crear uno
+                if (!$button.length && amazonUrl) {
+                    const buttonText = window.cosasAmazonConfig?.buttonText || 'Ver en Amazon';
+                    const $newButton = $('<a>', {
+                        'class': 'amazon-button',
+                        'href': '#',
+                        'text': buttonText
+                    });
+                    $block.append($newButton);
+                    console.log('Botón Amazon creado dinámicamente para:', amazonUrl);
+                }
+                
+                // Verificar que el botón tenga URL
+                if ($button.length && !amazonUrl) {
+                    console.warn('Botón Amazon encontrado pero sin URL en:', $block);
+                }
+            });
+        }
+        
+        // Inicializar botones al cargar
+        initializeAmazonButtons();
+        
+        // Re-inicializar después de cambios en el DOM (para contenido dinámico)
+        if (window.MutationObserver) {
+            const observer = new MutationObserver(function(mutations) {
+                let shouldReinit = false;
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length > 0) {
+                        $(mutation.addedNodes).find('.cosas-de-amazon-block').each(function() {
+                            shouldReinit = true;
+                        });
+                    }
+                });
+                if (shouldReinit) {
+                    initializeAmazonButtons();
+                }
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+        
+        // Manejar clicks en botones de Amazon (delegado para botones dinámicos)
+        $(document).on('click', '.cosas-de-amazon-block .amazon-button', function(e) {
             e.preventDefault();
             
             const $block = $(this).closest('.cosas-de-amazon-block');
-            const url = $block.data('amazon-url');
+            const url = $block.data('amazon-url') || $block.attr('data-amazon-url');
             
             if (url) {
                 // Tracking del click (opcional)
@@ -16,6 +67,8 @@
                 
                 // Abrir en nueva ventana
                 window.open(url, '_blank', 'noopener,noreferrer');
+            } else {
+                console.error('No se encontró URL de Amazon para el botón');
             }
         });
         

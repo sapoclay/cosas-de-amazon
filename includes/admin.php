@@ -18,6 +18,7 @@ class CosasAmazonAdmin {
         add_action('wp_ajax_cosas_amazon_debug', array($this, 'ajax_debug'));
         add_action('wp_ajax_get_cache_stats', array($this, 'ajax_get_cache_stats'));
         add_action('wp_ajax_clear_cache', array($this, 'ajax_clear_cache'));
+        add_action('wp_ajax_cosas_amazon_test_paapi', array($this, 'ajax_test_paapi'));
         
         // Añadir estilos CSS para la página de admin
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_styles'));
@@ -25,6 +26,8 @@ class CosasAmazonAdmin {
         // Añadir sanitización de opciones
         add_filter('pre_update_option_cosas_amazon_options', array($this, 'sanitize_options'));
         add_filter('pre_update_option_cosas_amazon_description_length', array($this, 'sanitize_description_length'));
+        add_filter('pre_update_option_cosas_amazon_custom_css', array($this, 'sanitize_custom_css'));
+        add_filter('pre_update_option_cosas_amazon_api_options', array($this, 'sanitize_api_options'));
         
         // Inyectar CSS dinámico en el frontend
         add_action('wp_head', array($this, 'inject_dynamic_css'), 20);
@@ -118,6 +121,71 @@ class CosasAmazonAdmin {
     public function sanitize_description_length($value) {
         $value = intval($value);
         return max(50, min(500, $value));
+    }
+    
+    // Función para sanitizar el CSS personalizado
+    public function sanitize_custom_css($css) {
+        if (empty($css)) {
+            return '';
+        }
+        
+        // Permitir CSS básico pero remover elementos potencialmente peligrosos
+        $css = wp_strip_all_tags($css);
+        
+        // Lista de propiedades y elementos CSS peligrosos que no permitiremos
+        $dangerous_patterns = array(
+            '/javascript:/i',
+            '/expression\s*\(/i',
+            '/behavior\s*:/i',
+            '/binding\s*:/i',
+            '/@import/i',
+            '/document\./i',
+            '/window\./i',
+            '/eval\s*\(/i'
+        );
+        
+        foreach ($dangerous_patterns as $pattern) {
+            $css = preg_replace($pattern, '', $css);
+        }
+        
+        // Limitar el tamaño del CSS (máximo 50KB)
+        if (strlen($css) > 51200) {
+            $css = substr($css, 0, 51200);
+        }
+        
+        return $css;
+    }
+    
+    // Función para sanitizar las opciones de la API
+    public function sanitize_api_options($options) {
+        if (!is_array($options)) {
+            return array();
+        }
+        
+        $sanitized = array();
+        
+        // Habilitar/deshabilitar API
+        $sanitized['api_enabled'] = !empty($options['api_enabled']) ? 1 : 0;
+        
+        // Access Key ID
+        $sanitized['amazon_access_key'] = isset($options['amazon_access_key']) ? sanitize_text_field(trim($options['amazon_access_key'])) : '';
+        
+        // Secret Access Key
+        $sanitized['amazon_secret_key'] = isset($options['amazon_secret_key']) ? trim($options['amazon_secret_key']) : '';
+        
+        // Associate Tag
+        $sanitized['amazon_associate_tag'] = isset($options['amazon_associate_tag']) ? sanitize_text_field(trim($options['amazon_associate_tag'])) : '';
+        
+        // Validar formato de Associate Tag
+        if (!empty($sanitized['amazon_associate_tag']) && !preg_match('/^[a-zA-Z0-9\-]+$/', $sanitized['amazon_associate_tag'])) {
+            $sanitized['amazon_associate_tag'] = '';
+        }
+        
+        // Región
+        $allowed_regions = array('es', 'us', 'uk', 'de', 'fr', 'it');
+        $sanitized['amazon_region'] = isset($options['amazon_region']) && in_array($options['amazon_region'], $allowed_regions) ? $options['amazon_region'] : 'es';
+        
+        return $sanitized;
     }
     
     // Función para generar CSS dinámico basado en las opciones
@@ -228,7 +296,16 @@ class CosasAmazonAdmin {
     // Función para inyectar CSS dinámico en el frontend
     public function inject_dynamic_css() {
         $css = $this->generate_dynamic_css();
-        echo "<style id='cosas-amazon-dynamic-css'>\n{$css}</style>\n";
+        
+        // Agregar CSS personalizado del usuario
+        $custom_css = get_option('cosas_amazon_custom_css', '');
+        if (!empty($custom_css)) {
+            $css .= "\n\n/* CSS Personalizado del Usuario */\n" . $custom_css . "\n";
+        }
+        
+        if (!empty($css)) {
+            echo "<style id='cosas-amazon-dynamic-css'>\n{$css}</style>\n";
+        }
     }
     
     // Función para mostrar mensajes de confirmación
@@ -777,9 +854,17 @@ class CosasAmazonAdmin {
     
     public function add_admin_menu() {
         error_log('[COSAS_AMAZON_DEBUG] add_admin_menu llamada');
+        error_log('[COSAS_AMAZON_DEBUG] current_user_can(manage_options): ' . (current_user_can('manage_options') ? 'true' : 'false'));
+        error_log('[COSAS_AMAZON_DEBUG] is_admin(): ' . (is_admin() ? 'true' : 'false'));
+        
+        // Verificar permisos antes de registrar
+        if (!current_user_can('manage_options')) {
+            error_log('[COSAS_AMAZON_DEBUG] ❌ Usuario sin permisos manage_options');
+            return;
+        }
         
         // Añadir menú principal
-        add_menu_page(
+        $main_page = add_menu_page(
             'Cosas de Amazon',
             'Cosas de Amazon', 
             'manage_options',
@@ -789,21 +874,20 @@ class CosasAmazonAdmin {
             58
         );
         
-        // Añadir también en configuración
-        add_options_page(
-            'Configuración de Cosas de Amazon',
-            'Cosas de Amazon',
-            'manage_options',
-            'cosas-amazon-settings',
-            array($this, 'options_page')
-        );
+        if ($main_page) {
+            error_log('[COSAS_AMAZON_DEBUG] ✅ Menú principal registrado: ' . $main_page);
+        } else {
+            error_log('[COSAS_AMAZON_DEBUG] ❌ Error registrando menú principal');
+        }
         
-        error_log('[COSAS_AMAZON_DEBUG] Menú registrado en opciones y menú principal');
+        error_log('[COSAS_AMAZON_DEBUG] Menú principal registrado correctamente');
     }
     
     public function admin_init() {
         register_setting('cosas_amazon_settings', 'cosas_amazon_options');
         register_setting('cosas_amazon_settings', 'cosas_amazon_description_length');
+        register_setting('cosas_amazon_settings', 'cosas_amazon_custom_css'); // Nueva opción para CSS personalizado
+        register_setting('cosas_amazon_settings', 'cosas_amazon_api_options'); // Configuración PA API
         
         add_settings_section(
             'cosas_amazon_general',
@@ -874,6 +958,62 @@ class CosasAmazonAdmin {
             array($this, 'scraping_timeout_callback'),
             'cosas_amazon_settings',
             'cosas_amazon_general'
+        );
+        
+        // Sección de configuración de Amazon PA API
+        add_settings_section(
+            'cosas_amazon_paapi',
+            'Configuración Amazon PA API',
+            array($this, 'paapi_section_callback'),
+            'cosas_amazon_settings'
+        );
+        
+        add_settings_field(
+            'api_enabled',
+            'Habilitar Amazon PA API',
+            array($this, 'api_enabled_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
+        );
+        
+        add_settings_field(
+            'amazon_access_key',
+            'Access Key ID',
+            array($this, 'amazon_access_key_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
+        );
+        
+        add_settings_field(
+            'amazon_secret_key',
+            'Secret Access Key',
+            array($this, 'amazon_secret_key_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
+        );
+        
+        add_settings_field(
+            'amazon_associate_tag',
+            'Associate Tag',
+            array($this, 'amazon_associate_tag_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
+        );
+        
+        add_settings_field(
+            'amazon_region',
+            'Región',
+            array($this, 'amazon_region_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
+        );
+        
+        add_settings_field(
+            'test_paapi_connection',
+            'Test de Conexión',
+            array($this, 'test_paapi_connection_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
         );
         
         // Nueva sección para configuración por defecto de bloques
@@ -1028,6 +1168,21 @@ class CosasAmazonAdmin {
         );
 
         add_settings_section(
+            'cosas_amazon_validation',
+            'Validaciones de Datos',
+            array($this, 'validation_section_callback'),
+            'cosas_amazon_settings'
+        );
+        
+        add_settings_field(
+            'strict_discount_validation',
+            'Validación estricta de descuentos',
+            array($this, 'strict_discount_validation_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_validation'
+        );
+
+        add_settings_section(
             'cosas_amazon_tools',
             'Herramientas y Diagnósticos',
             array($this, 'tools_section_callback'),
@@ -1109,6 +1264,14 @@ class CosasAmazonAdmin {
             'style_presets',
             'Temas Predefinidos',
             array($this, 'style_presets_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_styles'
+        );
+        
+        add_settings_field(
+            'custom_css',
+            'CSS Personalizado',
+            array($this, 'custom_css_callback'),
             'cosas_amazon_settings',
             'cosas_amazon_styles'
         );
@@ -1326,6 +1489,27 @@ class CosasAmazonAdmin {
         $value = isset($options['high_discount_threshold']) ? $options['high_discount_threshold'] : 50;
         echo '<input type="number" name="cosas_amazon_options[high_discount_threshold]" value="' . esc_attr($value) . '" min="0" max="100" />';
         echo '<p class="description">Umbral en porcentaje para considerar un descuento como alto. Las ofertas por encima de este umbral se marcarán como destacadas.</p>';
+    }
+    
+    public function validation_section_callback() {
+        echo '<p>Configuración de validaciones para mejorar la precisión de los datos extraídos de Amazon.</p>';
+    }
+    
+    public function strict_discount_validation_callback() {
+        $options = get_option('cosas_amazon_options');
+        $value = isset($options['strict_discount_validation']) ? $options['strict_discount_validation'] : true;
+        echo '<input type="checkbox" name="cosas_amazon_options[strict_discount_validation]" value="1"' . checked($value, true, false) . ' />';
+        echo '<label for="cosas_amazon_options[strict_discount_validation]">Activar validación estricta de descuentos</label>';
+        echo '<p class="description"><strong>Recomendado:</strong> Cuando está activado, el plugin valida que los descuentos detectados sean reales comparando precios y verificando el contexto. Esto evita mostrar descuentos falsos pero puede ser más restrictivo.</p>';
+        echo '<div style="margin-top: 10px; padding: 10px; background: #e7f3ff; border-left: 4px solid #00a0d2; border-radius: 4px;">';
+        echo '<strong>¿Qué hace esta validación?</strong>';
+        echo '<ul style="margin: 8px 0;">';
+        echo '<li>✅ Verifica que el precio original sea mayor que el actual</li>';
+        echo '<li>✅ Valida que el porcentaje de descuento sea coherente con la diferencia de precios</li>';
+        echo '<li>✅ Comprueba que el descuento aparezca en un contexto válido de la página</li>';
+        echo '<li>✅ Elimina descuentos sin precio original para validar</li>';
+        echo '</ul>';
+        echo '</div>';
     }
     
     public function run_tests_callback() {
@@ -1590,6 +1774,56 @@ class CosasAmazonAdmin {
         echo '</div>';
     }
     
+    public function custom_css_callback() {
+        $custom_css = get_option('cosas_amazon_custom_css', '');
+        
+        echo '<div style="max-width: 800px;">';
+        echo '<div style="margin-bottom: 15px;">';
+        echo '<h4 style="margin: 0 0 10px 0;">🎨 CSS Personalizado</h4>';
+        echo '<p style="margin: 0 0 15px 0; color: #666;">Añade reglas CSS personalizadas que se aplicarán a todos los productos del plugin. Estas reglas tendrán prioridad sobre los estilos predeterminados.</p>';
+        echo '</div>';
+        
+        echo '<textarea name="cosas_amazon_custom_css" id="cosas_amazon_custom_css" rows="15" cols="80" style="width: 100%; font-family: monospace; font-size: 13px; border: 2px solid #ddd; border-radius: 6px; padding: 15px;" placeholder="/* Ejemplo de CSS personalizado:
+
+.cosas-amazon-product {
+    border: 2px solid #ff6b6b !important;
+    border-radius: 15px !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+}
+
+.cosas-amazon-title {
+    color: #2c3e50 !important;
+    font-weight: bold !important;
+}
+
+.cosas-amazon-price {
+    color: #e74c3c !important;
+    font-size: 18px !important;
+}
+
+.cosas-amazon-btn {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4) !important;
+    border-radius: 25px !important;
+} */">' . esc_textarea($custom_css) . '</textarea>';
+        
+        echo '<div style="margin-top: 15px; padding: 15px; background: #e8f4fd; border: 1px solid #bee5eb; border-radius: 6px;">';
+        echo '<h4 style="margin-top: 0; color: #0c5460;">💡 Consejos para CSS Personalizado</h4>';
+        echo '<ul style="margin: 10px 0; padding-left: 20px; color: #0c5460;">';
+        echo '<li><strong>Usa !important</strong> para asegurar que tus estilos tengan prioridad</li>';
+        echo '<li><strong>Clases principales:</strong> .cosas-amazon-product, .cosas-amazon-title, .cosas-amazon-price, .cosas-amazon-btn</li>';
+        echo '<li><strong>Estilos específicos:</strong> .cosas-amazon-horizontal, .cosas-amazon-vertical, .cosas-amazon-minimal</li>';
+        echo '<li><strong>Múltiples productos:</strong> .cosas-amazon-multiple-products</li>';
+        echo '<li><strong>Testa siempre</strong> los cambios en diferentes dispositivos</li>';
+        echo '</ul>';
+        echo '</div>';
+        
+        echo '<div style="margin-top: 15px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px;">';
+        echo '<h4 style="margin-top: 0;">⚠️ Importante</h4>';
+        echo '<p style="margin-bottom: 0;">El CSS personalizado se aplicará a todos los productos del plugin en todo el sitio web. Asegúrate de probar los cambios antes de aplicarlos en producción.</p>';
+        echo '</div>';
+        echo '</div>';
+    }
+    
     public function options_page() {
         // Mostrar mensajes de confirmación
         $this->show_settings_messages();
@@ -1705,6 +1939,60 @@ class CosasAmazonAdmin {
                         <p style="margin: 0 0 15px 0; font-size: 13px; color: rgba(255,255,255,0.9);">Estamos aquí para ayudarte con cualquier duda o problema</p>
                         <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px;">
                             <p style="margin: 0; font-size: 12px; color: rgba(255,255,255,0.8);">📧 admin@entreunosyceros.net</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel de herramientas de diagnóstico -->
+                    <div style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                        <h4 style="margin: 0 0 15px 0; color: #0073aa; font-size: 16px;">🔧 Herramientas de Diagnóstico</h4>
+                        <p style="margin: 0 0 15px 0; font-size: 13px; color: #666;">Si experimentas problemas con el plugin, puedes utilizar estas herramientas para diagnosticar y resolver los errores.</p>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                            <?php
+                            // Generar token de seguridad temporal
+                            $security_token = wp_create_nonce('cosas_amazon_diagnostic_' . date('Y-m-d-H'));
+                            $base_url = plugins_url('', dirname(__FILE__));
+                            ?>
+                            
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                                <div>
+                                    <strong style="color: #0073aa;">🔍 Verificación de Enlaces</strong>
+                                    <div style="font-size: 12px; color: #666;">Verifica el estado de los enlaces del menú de administración</div>
+                                </div>
+                                <a href="<?php echo esc_url($base_url . '/verificacion-enlaces.php?token=' . $security_token); ?>" 
+                                   target="_blank" 
+                                   class="button button-secondary"
+                                   style="text-decoration: none;">Verificar</a>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                                <div>
+                                    <strong style="color: #0073aa;">🏥 Diagnóstico de Producción</strong>
+                                    <div style="font-size: 12px; color: #666;">Ejecuta un diagnóstico completo del plugin en producción</div>
+                                </div>
+                                <a href="<?php echo esc_url($base_url . '/diagnostico-produccion.php?token=' . $security_token); ?>" 
+                                   target="_blank" 
+                                   class="button button-secondary"
+                                   style="text-decoration: none;">Diagnosticar</a>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                                <div>
+                                    <strong style="color: #0073aa;">📋 Verificador de Menús</strong>
+                                    <div style="font-size: 12px; color: #666;">Verifica la estructura y configuración de los menús</div>
+                                </div>
+                                <a href="<?php echo esc_url($base_url . '/verificador-menus.php?token=' . $security_token); ?>" 
+                                   target="_blank" 
+                                   class="button button-secondary"
+                                   style="text-decoration: none;">Verificar Menús</a>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+                            <p style="margin: 0; font-size: 12px; color: #856404;">
+                                <strong>⚠️ Importante:</strong> Estas herramientas están destinadas para uso administrativo y diagnóstico. 
+                                Los enlaces incluyen tokens de seguridad temporales que expiran cada hora.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -2119,6 +2407,185 @@ class CosasAmazonAdmin {
             wp_send_json_success('Cache limpiado exitosamente. Se eliminaron ' . $deleted . ' entradas.');
         } else {
             wp_send_json_error('Error al limpiar el cache');
+        }
+    }
+    
+    // Callbacks para configuración Amazon PA API
+    public function paapi_section_callback() {
+        echo '<p>Configura tu acceso a la Amazon Product Advertising API para obtener datos de productos directamente desde Amazon.</p>';
+        echo '<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">';
+        echo '<h4 style="margin-top: 0;">📋 Información importante:</h4>';
+        echo '<ul style="margin-bottom: 0;">';
+        echo '<li><strong>Access Key ID y Secret Key:</strong> Obténlos desde tu cuenta de AWS IAM</li>';
+        echo '<li><strong>Associate Tag:</strong> Tu ID de afiliado de Amazon Associates</li>';
+        echo '<li><strong>Región:</strong> Selecciona la región donde tienes configurado tu programa de afiliados</li>';
+        echo '</ul>';
+        echo '</div>';
+    }
+    
+    public function api_enabled_callback() {
+        $options = get_option('cosas_amazon_api_options', array());
+        $value = isset($options['api_enabled']) ? $options['api_enabled'] : 0;
+        echo '<label>';
+        echo '<input type="checkbox" name="cosas_amazon_api_options[api_enabled]" value="1"' . checked($value, 1, false) . '>';
+        echo ' Habilitar Amazon PA API';
+        echo '</label>';
+        echo '<p class="description">Activar para usar la API oficial de Amazon en lugar de scraping web.</p>';
+    }
+    
+    public function amazon_access_key_callback() {
+        $options = get_option('cosas_amazon_api_options', array());
+        $value = isset($options['amazon_access_key']) ? $options['amazon_access_key'] : '';
+        echo '<input type="text" name="cosas_amazon_api_options[amazon_access_key]" value="' . esc_attr($value) . '" size="30" autocomplete="off">';
+        echo '<p class="description">Tu Access Key ID de AWS. Ejemplo: AKIAIOSFODNN7EXAMPLE</p>';
+    }
+    
+    public function amazon_secret_key_callback() {
+        $options = get_option('cosas_amazon_api_options', array());
+        $value = isset($options['amazon_secret_key']) ? $options['amazon_secret_key'] : '';
+        echo '<input type="password" name="cosas_amazon_api_options[amazon_secret_key]" value="' . esc_attr($value) . '" size="50" autocomplete="new-password">';
+        echo '<p class="description">Tu Secret Access Key de AWS. Se mantiene oculto por seguridad.</p>';
+    }
+    
+    public function amazon_associate_tag_callback() {
+        $options = get_option('cosas_amazon_api_options', array());
+        $value = isset($options['amazon_associate_tag']) ? $options['amazon_associate_tag'] : '';
+        echo '<input type="text" name="cosas_amazon_api_options[amazon_associate_tag]" value="' . esc_attr($value) . '" size="20">';
+        echo '<p class="description">Tu Associate Tag (ID de afiliado). Ejemplo: mitienda-21</p>';
+    }
+    
+    public function amazon_region_callback() {
+        $options = get_option('cosas_amazon_api_options', array());
+        $value = isset($options['amazon_region']) ? $options['amazon_region'] : 'es';
+        $regions = array(
+            'es' => 'España (amazon.es)',
+            'us' => 'Estados Unidos (amazon.com)',
+            'uk' => 'Reino Unido (amazon.co.uk)',
+            'de' => 'Alemania (amazon.de)',
+            'fr' => 'Francia (amazon.fr)',
+            'it' => 'Italia (amazon.it)',
+        );
+        
+        echo '<select name="cosas_amazon_api_options[amazon_region]">';
+        foreach ($regions as $region_code => $region_name) {
+            echo '<option value="' . esc_attr($region_code) . '"' . selected($value, $region_code, false) . '>' . esc_html($region_name) . '</option>';
+        }
+        echo '</select>';
+        echo '<p class="description">Selecciona la región de Amazon donde tienes configurado tu programa de afiliados.</p>';
+    }
+    
+    public function test_paapi_connection_callback() {
+        echo '<div id="paapi-test-container">';
+        echo '<button type="button" id="test-paapi-btn" class="button button-secondary">🔧 Probar Conexión PA API</button>';
+        echo '<div id="paapi-test-results" style="margin-top: 10px; padding: 10px; border-radius: 5px; display: none;"></div>';
+        echo '</div>';
+        echo '<p class="description">Prueba la conexión con Amazon PA API usando las credenciales configuradas.</p>';
+        
+        // Agregar JavaScript para el test
+        echo '<script>
+        jQuery(document).ready(function($) {
+            $("#test-paapi-btn").click(function() {
+                var button = $(this);
+                var results = $("#paapi-test-results");
+                
+                button.prop("disabled", true).text("🔄 Probando...");
+                results.hide();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: "POST",
+                    data: {
+                        action: "cosas_amazon_test_paapi",
+                        nonce: "' . wp_create_nonce('cosas_amazon_nonce') . '"
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var html = "✅ " + response.data.message;
+                            if (response.data.data && response.data.data.title) {
+                                html += "<br><small><strong>Producto de prueba:</strong> " + response.data.data.title + "</small>";
+                            }
+                            results.removeClass("error").addClass("success")
+                                   .css("background", "#d4edda").css("color", "#155724")
+                                   .css("border", "1px solid #c3e6cb")
+                                   .html(html);
+                        } else {
+                            var html = "❌ " + response.data.message;
+                            if (response.data.step) {
+                                html += "<br><small><strong>Paso:</strong> " + response.data.step + "</small>";
+                            }
+                            if (response.data.environment && response.data.environment.is_local) {
+                                html += "<br><div style=\\"background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 4px solid #ffc107;\\">";
+                                html += "<strong>🏠 ENTORNO LOCAL DETECTADO</strong><br>";
+                                html += "<small>Host: " + response.data.environment.host + " (" + response.data.environment.indicator + ")</small><br>";
+                                html += "<small><strong>💡 El error InternalFailure es muy común en desarrollo local.</strong></small><br>";
+                                html += "<small>📋 <a href=\\"test-local-vs-produccion.html\\" target=\\"_blank\\">Abrir diagnóstico local vs producción</a></small>";
+                                html += "</div>";
+                            }
+                            if (response.data.additional_info) {
+                                html += "<br><div style=\\"background: #e8f4fd; padding: 8px; border-radius: 4px; margin-top: 8px;\\">";
+                                html += "<small><strong>Información adicional:</strong><br>";
+                                for (var key in response.data.additional_info) {
+                                    html += "• " + key + ": " + response.data.additional_info[key] + "<br>";
+                                }
+                                html += "</small></div>";
+                            }
+                            if (response.data.details) {
+                                html += "<br><small><strong>Detalles técnicos:</strong> " + JSON.stringify(response.data.details) + "</small>";
+                            }
+                            results.removeClass("success").addClass("error")
+                                   .css("background", "#f8d7da").css("color", "#721c24")
+                                   .css("border", "1px solid #f5c6cb")
+                                   .html(html);
+                        }
+                        results.show();
+                    },
+                    error: function() {
+                        results.removeClass("success").addClass("error")
+                               .css("background", "#f8d7da").css("color", "#721c24")
+                               .css("border", "1px solid #f5c6cb")
+                               .html("❌ Error de comunicación con el servidor");
+                        results.show();
+                    },
+                    complete: function() {
+                        button.prop("disabled", false).text("🔧 Probar Conexión PA API");
+                    }
+                });
+            });
+        });
+        </script>';
+    }
+    
+    // Manejador AJAX para test de PA API
+    public function ajax_test_paapi() {
+        if (!wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
+            wp_send_json_error('Acceso denegado');
+            return;
+        }
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permisos insuficientes');
+            return;
+        }
+        
+        // Cargar clase PA-API si no está cargada
+        if (!class_exists('CosasAmazonPAAPI')) {
+            require_once dirname(__FILE__) . '/class-amazon-paapi.php';
+        }
+        
+        try {
+            $api = new CosasAmazonPAAPI();
+            // Usar el método mejorado que maneja entornos locales
+            $result = $api->testConnectionWithLocalFallback();
+            
+            if ($result['success']) {
+                wp_send_json_success($result);
+            } else {
+                wp_send_json_error($result);
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array(
+                'message' => 'Error al probar la conexión: ' . $e->getMessage()
+            ));
         }
     }
 }

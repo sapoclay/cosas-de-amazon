@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Cosas de Amazon
  * Plugin URI: https://entreunosyceros.com
- * Description: Plugin para mostrar productos de Amazon usando enlaces cortos con diferentes estilos de tarjetas. Versión mejorada con extracción avanzada de imágenes y CSS forzado. Incluye soporte completo para carousel con elementos centrados.
- * Version: 2.2.0
+ * Description: Plugin para mostrar productos de Amazon usando enlaces cortos con diferentes estilos de tarjetas. Versión mejorada con limitaciones progresivas completas, sincronización editor-frontend, soporte integral para múltiples productos y CSS personalizado.
+ * Version: 2.11.0
  * Author: entreunosyceros
  * License: GPL v2 or later
  * Text Domain: cosas-de-amazon
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Definir constantes del plugin
-define('COSAS_AMAZON_VERSION', '2.2.0');
+define('COSAS_AMAZON_VERSION', '2.11.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -28,8 +28,8 @@ if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/class-amazon-paapi.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/class-amazon-paapi.php';
 }
 
-// Cargar archivos adicionales solo si existen
-if (is_admin() && file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php')) {
+// Cargar clase admin siempre (necesaria para verificaciones)
+if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php';
 }
 
@@ -58,6 +58,58 @@ if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'core/rest-endpoints.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'core/rest-endpoints.php';
 }
 
+// Detectar servidor y aplicar configuraciones específicas
+function cosas_amazon_detect_server_config() {
+    $is_litespeed = stripos($_SERVER['SERVER_SOFTWARE'] ?? '', 'litespeed') !== false;
+    
+    if ($is_litespeed) {
+        // Configuración específica para LiteSpeed
+        add_action('wp_enqueue_scripts', 'cosas_amazon_litespeed_assets', 5);
+        add_action('admin_enqueue_scripts', 'cosas_amazon_litespeed_assets', 5);
+        
+        // Headers anti-cache para LiteSpeed
+        add_action('send_headers', 'cosas_amazon_litespeed_headers');
+    }
+}
+add_action('init', 'cosas_amazon_detect_server_config', 1);
+
+// Configuración de assets para LiteSpeed
+function cosas_amazon_litespeed_assets() {
+    $asset_version = get_option('cosas_amazon_asset_version', COSAS_AMAZON_VERSION);
+    
+    // Forzar recarga con timestamp si es necesario
+    $emergency_config = get_option('cosas_amazon_emergency_config', []);
+    if (!empty($emergency_config['debug_mode'])) {
+        $asset_version = time();
+    }
+    
+    // Registrar assets con versión actualizada
+    wp_register_style(
+        'cosas-amazon-litespeed-fix',
+        COSAS_AMAZON_PLUGIN_URL . 'assets/css/style.css',
+        [],
+        $asset_version,
+        'all'
+    );
+    
+    wp_register_script(
+        'cosas-amazon-litespeed-fix',
+        COSAS_AMAZON_PLUGIN_URL . 'assets/js/frontend.js',
+        ['jquery'],
+        $asset_version,
+        true
+    );
+}
+
+// Headers específicos para LiteSpeed
+function cosas_amazon_litespeed_headers() {
+    if (is_admin() || strpos($_SERVER['REQUEST_URI'] ?? '', 'wp-content/plugins/cosas-de-amazon') !== false) {
+        header('Cache-Control: no-cache, no-store, must-revalidate', true);
+        header('Pragma: no-cache', true);
+        header('Expires: Thu, 01 Jan 1970 00:00:00 GMT', true);
+    }
+}
+
 // Inicializar el plugin
 function cosas_amazon_init() {
     new CosasDeAmazon();
@@ -77,9 +129,37 @@ add_action('init', function() {
 }, 999); // Prioridad alta para ejecutar después de otros plugins
 
 // Inicializar clases si existen (solo una vez)
-if (is_admin() && class_exists('CosasAmazonAdmin')) {
-    new CosasAmazonAdmin();
-}
+// Hook temprano para inicializar admin
+add_action('init', function() {
+    if (class_exists('CosasAmazonAdmin')) {
+        // Verificar si ya se ha inicializado para evitar duplicados
+        if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
+            $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
+            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en init');
+        }
+    }
+}, 1); // Prioridad muy temprana
+
+// Usar hook admin_init para asegurar que WordPress esté completamente cargado
+add_action('admin_init', function() {
+    if (is_admin() && class_exists('CosasAmazonAdmin')) {
+        // Verificar si ya se ha inicializado para evitar duplicados
+        if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
+            $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
+            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en admin_init');
+        }
+    }
+});
+
+// También inicializar en admin_menu como fallback
+add_action('admin_menu', function() {
+    if (is_admin() && class_exists('CosasAmazonAdmin')) {
+        if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
+            $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
+            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en admin_menu (fallback)');
+        }
+    }
+}, 5); // Prioridad temprana
 
 if (class_exists('CosasAmazonCustomizer')) {
     new CosasAmazonCustomizer();
@@ -133,12 +213,48 @@ function cosas_amazon_activate() {
         'show_description' => true,
         'primary_color' => '#e47911',
         'secondary_color' => '#232f3e',
-        'accent_color' => '#ff9900'
+        'accent_color' => '#ff9900',
+        'show_button_by_default' => true,
+        'default_button_text' => 'Ver en Amazon',
+        'enable_cache' => true,
+        'track_clicks' => true,
+        'button_style' => 'modern',
+        'open_in_new_tab' => true,
+        'enable_fallback_images' => true,
+        'show_price_by_default' => true,
+        'show_discount_by_default' => true,
+        'show_description_by_default' => true,
+        'default_description_length' => 150,
+        'default_text_color' => '#000000',
+        'default_font_size' => '16px',
+        'default_border_style' => 'solid',
+        'default_border_color' => '#cccccc',
+        'default_background_color' => '#ffffff',
+        'default_alignment' => 'center',
+        'default_button_color' => '#FF9900',
+        'show_special_offer_by_default' => true,
+        'default_special_offer_color' => '#e74c3c',
+        'default_block_size' => 'medium',
+        'default_products_per_row' => 2
     );
     
     $existing_options = get_option('cosas_amazon_options', array());
     $merged_options = array_merge($default_options, $existing_options);
     update_option('cosas_amazon_options', $merged_options);
+    
+    // Configuración específica para producción
+    $server_type = stripos($_SERVER['SERVER_SOFTWARE'] ?? '', 'litespeed') !== false ? 'litespeed' : 'other';
+    $production_config = array(
+        'activation_date' => current_time('mysql'),
+        'server_type' => $server_type,
+        'asset_version' => time(),
+        'force_button_display' => true,
+        'production_mode' => !WP_DEBUG
+    );
+    update_option('cosas_amazon_production_config', $production_config);
+    
+    // Generar nueva versión de assets para evitar cache
+    update_option('cosas_amazon_asset_version', time());
     
     // Limpiar caché anterior si existe
     $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_cosas_amazon_product_%'");
@@ -151,6 +267,24 @@ function cosas_amazon_activate() {
     
     // Establecer notificación de activación
     set_transient('cosas_amazon_activation_notice', true, 60);
+    
+    // Forzar inicialización de la clase admin para verificar menús
+    if (class_exists('CosasAmazonAdmin')) {
+        $admin_instance = new CosasAmazonAdmin();
+        $GLOBALS['cosas_amazon_admin_instance'] = $admin_instance;
+        error_log('[COSAS_AMAZON_DEBUG] Admin instance creada durante activación');
+        
+        // Forzar que los hooks de admin_menu se ejecuten inmediatamente
+        if (method_exists($admin_instance, 'add_admin_menu')) {
+            $admin_instance->add_admin_menu();
+            error_log('[COSAS_AMAZON_DEBUG] Menús admin forzados durante activación');
+        }
+    }
+    
+    // Limpiar cache de opciones para forzar recarga
+    wp_cache_delete('cosas_amazon_options', 'options');
+    
+    error_log('[COSAS_AMAZON_DEBUG] Plugin activado completamente');
 }
 
 function cosas_amazon_deactivate() {
@@ -168,12 +302,9 @@ function cosas_amazon_first_activation_notice() {
         ?>
         <div class="notice notice-success is-dismissible">
             <h3>🎉 ¡Cosas de Amazon activado!</h3>
-            <p>El plugin se ha activado correctamente. Si tienes problemas con el scraping:</p>
-            <ul>
-                <li><strong>Emergencia:</strong> <a href="<?php echo admin_url('options-general.php?page=cosas-amazon-emergency'); ?>">Configuración de emergencia</a></li>
-                <li><strong>Diagnóstico:</strong> <a href="<?php echo admin_url('options-general.php?page=cosas-amazon-diagnostic'); ?>">Herramientas de diagnóstico</a></li>
-                <li><strong>Configuración:</strong> <a href="<?php echo admin_url('options-general.php?page=cosas-amazon-options'); ?>">Opciones generales</a></li>
-            </ul>
+            <p>El plugin se ha activado correctamente.</p>
+            <p><strong>Próximo paso:</strong> Ve a <a href="<?php echo admin_url('admin.php?page=cosas-amazon-main'); ?>"><strong>Cosas de Amazon</strong></a> en el menú de administración para configurar el plugin.</p>
+            <p><small><strong>💡 Tip:</strong> En la página de configuración encontrarás herramientas de diagnóstico y verificación si necesitas solucionar algún problema.</small></p>
         </div>
         <?php
         delete_transient('cosas_amazon_activation_notice');

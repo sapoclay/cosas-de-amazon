@@ -1,6 +1,6 @@
 /**
  * Bloque de Gutenberg para Cosas de Amazon
- * Version: 1.3.0
+ * Version: 2.3.4 - SOPORTE HORIZONTAL+LARGE
  */
 
 (function(blocks, element, components, blockEditor, data, compose, apiFetch) {
@@ -278,6 +278,62 @@
                 }
             }, [productData]);
             
+            // Limitar URLs y productsPerRow: ORIGINAL para horizontal (max 2), NUEVAS limitaciones para compacta/vertical/minimal
+            useEffect(() => {
+                if (displayStyle === 'horizontal' || displayStyle === 'compact' || displayStyle === 'vertical' || displayStyle === 'minimal') {
+                    const updates = {};
+                    
+                    // Determinar límites según el estilo y tamaño
+                    let maxProducts, maxUrls;
+                    
+                    if (displayStyle === 'horizontal') {
+                        // COMPORTAMIENTO ORIGINAL HORIZONTAL: siempre máximo 2 productos
+                        maxProducts = 2;
+                        maxUrls = 1; // 1 principal + 1 adicional = 2 total
+                    } else if (displayStyle === 'compact' || displayStyle === 'vertical') {
+                        // COMPACTA Y VERTICAL tienen las mismas limitaciones progresivas
+                        switch(blockSize) {
+                            case 'xlarge':
+                            case 'large':
+                                maxProducts = 2;
+                                maxUrls = 1; // 1 principal + 1 adicional = 2 total
+                                break;
+                            case 'medium':
+                            case 'small':
+                                maxProducts = 3;
+                                maxUrls = 2; // 1 principal + 2 adicionales = 3 total
+                                break;
+                            default:
+                                maxProducts = 3; // Máximo 3 para compacta/vertical por defecto
+                                maxUrls = 2;
+                                break;
+                        }
+                    } else if (displayStyle === 'minimal') {
+                        // MINIMAL: siempre máximo 3 productos para todos los tamaños
+                        maxProducts = 3;
+                        maxUrls = 2; // 1 principal + 2 adicionales = 3 total
+                    }
+                    
+                    // Limitar URLs adicionales según el tamaño
+                    if (Array.isArray(amazonUrls) && amazonUrls.length > maxUrls) {
+                        const limitedUrls = amazonUrls.slice(0, maxUrls);
+                        console.log(`⚠️ ${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Limitando URLs de ${amazonUrls.length} a ${limitedUrls.length}`);
+                        updates.amazonUrls = limitedUrls;
+                    }
+                    
+                    // Limitar productos por fila según el tamaño
+                    if (productsPerRow > maxProducts) {
+                        console.log(`⚠️ ${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Limitando productos por fila de ${productsPerRow} a ${maxProducts}`);
+                        updates.productsPerRow = maxProducts;
+                    }
+                    
+                    // Aplicar actualizaciones si es necesario
+                    if (Object.keys(updates).length > 0) {
+                        setAttributes(updates);
+                    }
+                }
+            }, [displayStyle, blockSize, amazonUrls, productsPerRow]);
+            
             const fetchProductData = () => {
                 if (!amazonUrl) {
                     setError('Por favor, introduce una URL de Amazon');
@@ -426,9 +482,15 @@
             };
             
             const renderMultipleProductsGrid = () => {
+                // FORZAR productsPerRow = 2 para horizontal + small/medium/large/xlarge (consistencia con PHP)
+                let effectiveProductsPerRow = productsPerRow;
+                if (displayStyle === 'horizontal' && ['small', 'medium', 'large', 'xlarge'].includes(blockSize)) {
+                    effectiveProductsPerRow = 2;
+                }
+                
                 const gridStyle = {
                     display: 'grid',
-                    gridTemplateColumns: `repeat(${productsPerRow}, 1fr)`,
+                    gridTemplateColumns: `repeat(${effectiveProductsPerRow}, 1fr)`,
                     gap: '20px',
                     width: '100%',
                     justifyContent: alignment === 'left' ? 'flex-start' : alignment === 'right' ? 'flex-end' : 'center'
@@ -443,10 +505,270 @@
                         textAlign: alignment
                     };
                     
+                    // Para horizontal + small/medium/large/xlarge, crear estructura con contenedor de contenido
+                    if (displayStyle === 'horizontal' && (blockSize === 'small' || blockSize === 'medium' || blockSize === 'large' || blockSize === 'xlarge')) {
+                        return el('div', {
+                            key: `product-${index}`,
+                            className: `cosas-amazon-product cosas-amazon-${displayStyle} cosas-amazon-size-${blockSize} cosas-amazon-align-${alignment}`,
+                            style: cardStyle,
+                            'data-cosas-amazon-debug': 'true',
+                            'data-display-style': displayStyle,
+                            'data-block-size': blockSize
+                        },
+                            // Imagen del producto (columna izquierda)
+                            product.image && el('div', { 
+                                className: 'cosas-amazon-image'
+                            },
+                                el('img', {
+                                    src: product.image,
+                                    alt: product.title || 'Producto de Amazon'
+                                })
+                            ),
+                            
+                            // Contenedor de contenido (columna derecha)
+                            el('div', {
+                                className: 'cosas-amazon-content'
+                            },
+                                // Título del producto
+                                product.title && el('h4', { 
+                                    className: 'cosas-amazon-title',
+                                    'data-cosas-amazon-title': 'true',
+                                    'data-block-size': blockSize,
+                                    'data-display-style': displayStyle
+                                }, product.title),
+                                
+                                // Valoraciones del producto
+                                areRatingsEnabled() && (product.rating || product.reviewCount) && el('div', { 
+                                    className: 'cosas-amazon-rating'
+                                },
+                                    product.rating && generateRatingStars(product.rating),
+                                    product.rating && el('span', { 
+                                        className: 'cosas-amazon-rating-number'
+                                    }, product.rating),
+                                    product.reviewCount && el('span', { 
+                                        className: 'cosas-amazon-review-count'
+                                    }, formatReviewCount(product.reviewCount))
+                                ),
+                                
+                                // Precios
+                                (showPrice || showDiscount) && el('div', { 
+                                    className: 'cosas-amazon-pricing'
+                                },
+                                    showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
+                                        className: 'cosas-amazon-discount'
+                                    }, `-${product.discount}%`),
+                                    showPrice && product.price && el('div', { 
+                                        className: 'cosas-amazon-price'
+                                    }, product.price),
+                                    showPrice && product.originalPrice && el('div', { 
+                                        className: 'cosas-amazon-original-price'
+                                    }, product.originalPrice)
+                                ),
+                                
+                                // Etiqueta de oferta especial (DENTRO del contenido)
+                                showSpecialOffer && (specialOfferText || product.specialOffer) && el('div', {
+                                    className: 'cosas-amazon-special-offer'
+                                }, el('span', {
+                                    style: {
+                                        backgroundColor: specialOfferColor
+                                    }
+                                }, specialOfferText || product.specialOffer || 'Oferta')),
+                                
+                                // Botón "Ver en Amazon"
+                                showButton && el('div', { 
+                                    className: 'cosas-amazon-button'
+                                },
+                                    el('a', {
+                                        href: [amazonUrl, ...amazonUrls][index] || amazonUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                        className: 'cosas-amazon-btn',
+                                        style: {
+                                            backgroundColor: buttonColor
+                                        }
+                                    }, buttonText || 'Ver en Amazon')
+                                )
+                            )
+                        );
+                    }
+                    
+                    // Para estilo minimal: estructura específica
+                    if (displayStyle === 'minimal') {
+                        return el('div', {
+                            key: `product-${index}`,
+                            className: `cosas-amazon-product cosas-amazon-${displayStyle} cosas-amazon-size-${blockSize} cosas-amazon-align-${alignment}`,
+                            style: {
+                                ...cardStyle,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                padding: '10px',
+                                maxWidth: 'none', // Anular max-width para grid
+                                minHeight: '120px',
+                                fontSize: '12px',
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
+                                position: 'relative'
+                            },
+                            'data-cosas-amazon-debug': 'true',
+                            'data-display-style': displayStyle,
+                            'data-block-size': blockSize
+                        },
+                            // Título del producto en la parte superior
+                            product.title && el('h4', { 
+                                className: 'cosas-amazon-title',
+                                style: { 
+                                    fontSize: '17px', 
+                                    fontWeight: 'bold', 
+                                    margin: '0 0 10px 0', 
+                                    lineHeight: '1.3',
+                                    color: '#333',
+                                    order: 1
+                                }
+                            }, product.title.length > 50 ? product.title.substring(0, 50) + '...' : product.title),
+                            
+                            // Contenedor principal con imagen a la izquierda
+                            el('div', { 
+                                className: 'cosas-amazon-main-content',
+                                style: { 
+                                    display: 'flex', 
+                                    gap: '10px', 
+                                    flex: 1, 
+                                    order: 2 
+                                } 
+                            },
+                                // Imagen a la izquierda
+                                product.image && el('div', { 
+                                    className: 'cosas-amazon-image',
+                                    style: { 
+                                        width: '60px', 
+                                        height: '60px', 
+                                        flexShrink: 0, 
+                                        overflow: 'hidden', 
+                                        borderRadius: '4px' 
+                                    } 
+                                },
+                                    el('img', {
+                                        src: product.image,
+                                        alt: product.title || 'Producto de Amazon',
+                                        style: { 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'cover', 
+                                            borderRadius: '4px' 
+                                        }
+                                    })
+                                ),
+                                
+                                // Contenido a la derecha
+                                el('div', { 
+                                    className: 'cosas-amazon-content',
+                                    style: { 
+                                        flex: 1, 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        gap: '6px', 
+                                        overflow: 'hidden' 
+                                    } 
+                                },
+                                    // Precio
+                                    showPrice && product.price && el('div', { 
+                                        className: 'cosas-amazon-price',
+                                        style: { 
+                                            fontSize: '19px', 
+                                            color: '#B12704', 
+                                            fontWeight: 'bold', 
+                                            margin: '0', 
+                                            order: 1 
+                                        } 
+                                    }, product.price),
+                                    
+                                    // Línea de descuento y precio anterior
+                                    (showDiscount && product.discount && product.discount > 0 && product.discount < 100) || product.originalPrice ? 
+                                        el('div', { 
+                                            className: 'cosas-amazon-pricing-line',
+                                            style: { 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px', 
+                                                margin: '0', 
+                                                order: 2 
+                                            } 
+                                        },
+                                            showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
+                                                className: 'cosas-amazon-discount',
+                                                style: { 
+                                                    fontSize: '11px', 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '3px', 
+                                                    background: '#d93025', 
+                                                    color: 'white', 
+                                                    fontWeight: 'bold' 
+                                                } 
+                                            }, `-${product.discount}%`),
+                                            product.originalPrice && el('span', { 
+                                                className: 'cosas-amazon-original-price',
+                                                style: { 
+                                                    fontSize: '12px', 
+                                                    color: '#999', 
+                                                    textDecoration: 'line-through' 
+                                                } 
+                                            }, product.originalPrice)
+                                        ) : null,
+                                    
+                                    // Etiqueta de oferta especial
+                                    showSpecialOffer && (specialOfferText || product.specialOffer) && el('div', { 
+                                        className: 'cosas-amazon-special-offer',
+                                        style: { margin: '0', order: 3 } 
+                                    },
+                                        el('span', { 
+                                            style: { 
+                                                fontSize: '9px', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '10px', 
+                                                background: specialOfferColor, 
+                                                color: 'white', 
+                                                fontWeight: 'bold',
+                                                textTransform: 'uppercase'
+                                            } 
+                                        }, specialOfferText || (product.specialOffer ? product.specialOffer.substring(0, 8) : 'Oferta'))
+                                    ),
+                                    
+                                    // Botón en la parte inferior
+                                    showButton && el('a', {
+                                        href: [amazonUrl, ...amazonUrls][index] || amazonUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                        className: 'cosas-amazon-btn',
+                                        style: {
+                                            fontSize: '11px',
+                                            padding: '8px 12px',
+                                            marginTop: 'auto',
+                                            width: '100%',
+                                            boxSizing: 'border-box',
+                                            order: 5,
+                                            borderRadius: '4px',
+                                            minHeight: '32px',
+                                            display: 'inline-block',
+                                            background: buttonColor,
+                                            color: 'white',
+                                            fontWeight: '600',
+                                            textDecoration: 'none',
+                                            textAlign: 'center'
+                                        }
+                                    }, (buttonText || 'Ver en Amazon').substring(0, 15))
+                                )
+                            )
+                        );
+                    }
+                    
+                    // Para otros estilos, mantener estructura original
                     return el('div', {
                         key: `product-${index}`,
                         className: `cosas-amazon-product cosas-amazon-${displayStyle} cosas-amazon-size-${blockSize} cosas-amazon-align-${alignment}`,
-                        style: cardStyle
+                        style: cardStyle,
+                        'data-cosas-amazon-debug': 'true',
+                        'data-display-style': displayStyle,
+                        'data-block-size': blockSize
                     },
                         // Imagen del producto
                         product.image && el('div', { 
@@ -469,7 +791,10 @@
                         
                         // Título del producto
                         product.title && el('h4', { 
-                            className: 'cosas-amazon-title'
+                            className: 'cosas-amazon-title',
+                            'data-cosas-amazon-title': 'true',
+                            'data-block-size': blockSize,
+                            'data-display-style': displayStyle
                         }, product.title),
                         
                         // Valoraciones del producto
@@ -518,7 +843,7 @@
                 };
                 
                 return el('div', {
-                    className: 'cosas-amazon-multiple-products',
+                    className: `cosas-amazon-multiple-products cosas-amazon-grid-${effectiveProductsPerRow}-cols`,
                     style: gridStyle
                 }, productsData.map((product, index) => renderSingleProductCard(product, index)));
             };
@@ -630,9 +955,14 @@
                             return {
                                 ...containerStyles,
                                 display: 'flex',
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: '10px'
+                                flexDirection: 'column',
+                                padding: '10px',
+                                maxWidth: '280px',
+                                minHeight: '120px',
+                                fontSize: '12px',
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
+                                position: 'relative'
                             };
                         case 'compact':
                             return {
@@ -664,7 +994,17 @@
                 if (displayStyle === 'carousel') {
                     // Para carousel, mostrar múltiples productos si están disponibles
                     if (productsData && productsData.length > 0) {
-                        return el('div', { style: wrapperStyles },
+                        // Calcular la clase de alineación
+                        const alignmentClass = alignment === 'left' ? 'alignleft' : alignment === 'right' ? 'alignright' : 'aligncenter';
+                        
+                        return el('div', { 
+                            className: `cosas-amazon-alignment-wrapper ${alignmentClass}`,
+                            style: {
+                                ...wrapperStyles,
+                                display: 'flex',
+                                justifyContent: alignment === 'left' ? 'flex-start' : alignment === 'right' ? 'flex-end' : 'center'
+                            }
+                        },
                             el('div', { 
                                 className: `${containerClass} cosas-amazon-carousel`, 
                                 style: containerStyles 
@@ -742,7 +1082,16 @@
                         );
                     } else {
                         // Fallback para cuando no hay productos múltiples
-                        return el('div', { style: wrapperStyles },
+                        const alignmentClass = alignment === 'left' ? 'alignleft' : alignment === 'right' ? 'alignright' : 'aligncenter';
+                        
+                        return el('div', { 
+                            className: `cosas-amazon-alignment-wrapper ${alignmentClass}`,
+                            style: {
+                                ...wrapperStyles,
+                                display: 'flex',
+                                justifyContent: alignment === 'left' ? 'flex-start' : alignment === 'right' ? 'flex-end' : 'center'
+                            }
+                        },
                             el('div', { 
                                 className: `${containerClass} cosas-amazon-carousel`, 
                                 style: containerStyles 
@@ -904,62 +1253,173 @@
 
                 // Renderizado para estilos de tarjeta normal
                 if (displayStyle === 'minimal') {
-                    return el('div', { style: wrapperStyles },
+                    // Aplicar wrapper de alineación igual que otros estilos
+                    const alignmentWrapperStyles = {
+                        ...wrapperStyles,
+                        display: 'flex',
+                        justifyContent: alignment === 'left' ? 'flex-start' : alignment === 'right' ? 'flex-end' : 'center'
+                    };
+                    
+                    return el('div', { style: alignmentWrapperStyles },
                         el('div', { 
                             className: containerClass, 
-                            style: finalContainerStyles 
+                            style: {
+                                ...finalContainerStyles,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                padding: '10px',
+                                maxWidth: '280px',
+                                minHeight: '120px',
+                                fontSize: '12px',
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
+                                position: 'relative'
+                            }
                         },
-                            // Imagen pequeña para estilo minimal
-                            product.image && el('img', {
-                                src: product.image,
-                                alt: product.title || 'Producto de Amazon',
-                                style: { width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }
-                            }),
-                            el('div', { style: { flex: 1 } },
-                                product.title && el('div', { 
-                                    style: { fontWeight: 'bold', fontSize: '11px', marginBottom: '2px' } 
-                                }, product.title.substring(0, 30) + '...'),
-                                showPrice && product.price && el('div', { 
-                                    style: { color: '#B12704', fontWeight: 'bold', fontSize: '12px' } 
-                                }, product.price),
-                                el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' } },
-                                    showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
+                            // Título del producto en la parte superior
+                            product.title && el('h3', { 
+                                className: 'cosas-amazon-title',
+                                style: { 
+                                    fontSize: '17px', 
+                                    fontWeight: 'bold', 
+                                    margin: '0 0 10px 0', 
+                                    lineHeight: '1.3',
+                                    color: '#333',
+                                    order: 1
+                                } 
+                            }, product.title.length > 50 ? product.title.substring(0, 50) + '...' : product.title),
+                            
+                            // Contenedor principal con imagen a la izquierda
+                            el('div', { 
+                                className: 'cosas-amazon-main-content',
+                                style: { 
+                                    display: 'flex', 
+                                    gap: '10px', 
+                                    flex: 1, 
+                                    order: 2 
+                                } 
+                            },
+                                // Imagen a la izquierda
+                                product.image && el('div', { 
+                                    className: 'cosas-amazon-image',
+                                    style: { 
+                                        width: '60px', 
+                                        height: '60px', 
+                                        flexShrink: 0, 
+                                        overflow: 'hidden', 
+                                        borderRadius: '4px' 
+                                    } 
+                                },
+                                    el('img', {
+                                        src: product.image,
+                                        alt: product.title || 'Producto de Amazon',
                                         style: { 
-                                            background: '#B12704', 
-                                            color: 'white', 
-                                            padding: '1px 4px', 
-                                            borderRadius: '2px', 
-                                            fontSize: '10px' 
-                                        } 
-                                    }, `-${product.discount}%`),
-                                    showSpecialOffer && (specialOfferText || product.specialOffer) && el('span', { 
-                                        style: { 
-                                            background: specialOfferColor, 
-                                            color: 'white', 
-                                            padding: '1px 4px', 
-                                            borderRadius: '2px', 
-                                            fontSize: '9px',
-                                            textTransform: 'uppercase'
-                                        } 
-                                    }, specialOfferText || (product.specialOffer ? product.specialOffer.substring(0, 8) : 'Oferta'))
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'cover', 
+                                            borderRadius: '4px' 
+                                        }
+                                    })
                                 ),
-                                showButton && el('a', {
-                                    href: amazonUrl,
-                                    target: '_blank',
-                                    rel: 'noopener noreferrer',
-                                    className: 'cosas-amazon-btn',
-                                    style: {
-                                        display: 'inline-block',
-                                        background: buttonColor,
-                                        color: 'white',
-                                        padding: '3px 8px',
-                                        borderRadius: '3px',
-                                        fontSize: '10px',
-                                        fontWeight: '600',
-                                        textDecoration: 'none',
-                                        marginTop: '4px'
-                                    }
-                                }, (buttonText || 'Ver en Amazon').substring(0, 12))
+                                
+                                // Contenido a la derecha
+                                el('div', { 
+                                    className: 'cosas-amazon-content',
+                                    style: { 
+                                        flex: 1, 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        gap: '6px', 
+                                        overflow: 'hidden' 
+                                    } 
+                                },
+                                    // Precio
+                                    showPrice && product.price && el('div', { 
+                                        className: 'cosas-amazon-price',
+                                        style: { 
+                                            fontSize: '19px', 
+                                            color: '#B12704', 
+                                            fontWeight: 'bold', 
+                                            margin: '0', 
+                                            order: 1 
+                                        } 
+                                    }, product.price),
+                                    
+                                    // Línea de descuento y precio anterior
+                                    (showDiscount && product.discount && product.discount > 0 && product.discount < 100) || product.originalPrice ? 
+                                        el('div', { 
+                                            className: 'cosas-amazon-pricing-line',
+                                            style: { 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px', 
+                                                margin: '0', 
+                                                order: 2 
+                                            } 
+                                        },
+                                            showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
+                                                className: 'cosas-amazon-discount',
+                                                style: { 
+                                                    fontSize: '11px', 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '3px', 
+                                                    background: '#d93025', 
+                                                    color: 'white', 
+                                                    fontWeight: 'bold' 
+                                                } 
+                                            }, `-${product.discount}%`),
+                                            product.originalPrice && el('span', { 
+                                                className: 'cosas-amazon-original-price',
+                                                style: { 
+                                                    fontSize: '12px', 
+                                                    color: '#999', 
+                                                    textDecoration: 'line-through' 
+                                                } 
+                                            }, product.originalPrice)
+                                        ) : null,
+                                    
+                                    // Etiqueta de oferta especial
+                                    showSpecialOffer && (specialOfferText || product.specialOffer) && el('div', { 
+                                        className: 'cosas-amazon-special-offer',
+                                        style: { margin: '0', order: 3 } 
+                                    },
+                                        el('span', { 
+                                            style: { 
+                                                fontSize: '9px', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '10px', 
+                                                background: specialOfferColor, 
+                                                color: 'white', 
+                                                fontWeight: 'bold',
+                                                textTransform: 'uppercase'
+                                            } 
+                                        }, specialOfferText || (product.specialOffer ? product.specialOffer.substring(0, 8) : 'Oferta'))
+                                    ),
+                                    
+                                    // Botón en la parte inferior
+                                    showButton && el('a', {
+                                        href: amazonUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                        className: 'cosas-amazon-btn',
+                                        style: {
+                                            fontSize: '11px',
+                                            padding: '8px 12px',
+                                            marginTop: 'auto',
+                                            width: '100%',
+                                            boxSizing: 'border-box',
+                                            order: 5,
+                                            borderRadius: '4px',
+                                            minHeight: '32px',
+                                            display: 'inline-block',
+                                            background: buttonColor,
+                                            color: 'white',
+                                            fontWeight: '600',
+                                            textDecoration: 'none',
+                                            textAlign: 'center'
+                                        }
+                                    }, (buttonText || 'Ver en Amazon').substring(0, 15))
+                                )
                             )
                         )
                     );
@@ -970,77 +1430,155 @@
                         className: containerClass, 
                         style: finalContainerStyles 
                     },
-                        // Imagen del producto
-                        product.image && el('div', { 
-                            className: 'cosas-amazon-image'
-                        },
-                            el('img', {
-                                src: product.image,
-                                alt: product.title || 'Producto de Amazon'
-                            })
-                        ),
-                        // Etiqueta de oferta especial (entre imagen y contenido)
-                        showSpecialOffer && (specialOfferText || product.specialOffer) && el('div', {
-                            className: 'cosas-amazon-special-offer'
-                        }, el('span', {
-                            style: {
-                                backgroundColor: specialOfferColor
-                            }
-                        }, specialOfferText || product.specialOffer || 'Oferta')),
-                        
-                        el('div', { 
-                            className: 'cosas-amazon-content'
-                        },
-                            product.title && el('h3', { 
-                                className: 'cosas-amazon-title'
-                            }, product.title),
-                            
-                            // Valoraciones del producto
-                            areRatingsEnabled() && (product.rating || product.reviewCount) && el('div', { 
-                                className: 'cosas-amazon-rating'
+                        // Para horizontal + small/medium/large, estructura especial con contenedor de contenido
+                        ...(displayStyle === 'horizontal' && (blockSize === 'small' || blockSize === 'medium' || blockSize === 'large') ? [
+                            // Imagen del producto (columna izquierda)
+                            product.image && el('div', { 
+                                className: 'cosas-amazon-image'
                             },
-                                product.rating && generateRatingStars(product.rating),
-                                product.rating && el('span', { 
-                                    className: 'cosas-amazon-rating-number'
-                                }, product.rating),
-                                product.reviewCount && el('span', { 
-                                    className: 'cosas-amazon-review-count'
-                                }, formatReviewCount(product.reviewCount))
+                                el('img', {
+                                    src: product.image,
+                                    alt: product.title || 'Producto de Amazon'
+                                })
                             ),
                             
-                            showDescription && product.description && displayStyle !== 'compact' && el('div', { 
-                                className: 'cosas-amazon-description'
-                            }, product.description),
-                            
-                            (showPrice || showDiscount) && el('div', { 
-                                className: 'cosas-amazon-pricing'
+                            // Contenedor de contenido (columna derecha)
+                            el('div', { 
+                                className: 'cosas-amazon-content'
                             },
-                                showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
-                                    className: 'cosas-amazon-discount'
-                                }, `-${product.discount}%`),
-                                showPrice && product.price && el('span', { 
-                                    className: 'cosas-amazon-price'
-                                }, product.price),
-                                showPrice && product.originalPrice && el('span', { 
-                                    className: 'cosas-amazon-original-price'
-                                }, product.originalPrice)
-                            ),
-                            
-                            // Botón "Ver en Amazon"
-                            showButton && el('div', { 
-                                className: 'cosas-amazon-button'
-                            },
-                                el('a', {
-                                    href: amazonUrl,
-                                    target: '_blank',
-                                    rel: 'noopener noreferrer',
-                                    className: 'cosas-amazon-btn',
+                                product.title && el('h3', { 
+                                    className: 'cosas-amazon-title'
+                                }, product.title),
+                                
+                                // Valoraciones del producto
+                                areRatingsEnabled() && (product.rating || product.reviewCount) && el('div', { 
+                                    className: 'cosas-amazon-rating'
+                                },
+                                    product.rating && generateRatingStars(product.rating),
+                                    product.rating && el('span', { 
+                                        className: 'cosas-amazon-rating-number'
+                                    }, product.rating),
+                                    product.reviewCount && el('span', { 
+                                        className: 'cosas-amazon-review-count'
+                                    }, formatReviewCount(product.reviewCount))
+                                ),
+                                
+                                showDescription && product.description && displayStyle !== 'compact' && el('div', { 
+                                    className: 'cosas-amazon-description'
+                                }, product.description),
+                                
+                                (showPrice || showDiscount) && el('div', { 
+                                    className: 'cosas-amazon-pricing'
+                                },
+                                    showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
+                                        className: 'cosas-amazon-discount'
+                                    }, `-${product.discount}%`),
+                                    showPrice && product.price && el('span', { 
+                                        className: 'cosas-amazon-price'
+                                    }, product.price),
+                                    showPrice && product.originalPrice && el('span', { 
+                                        className: 'cosas-amazon-original-price'
+                                    }, product.originalPrice)
+                                ),
+                                
+                                // Etiqueta de oferta especial (DENTRO del contenido)
+                                showSpecialOffer && (specialOfferText || product.specialOffer) && el('div', {
+                                    className: 'cosas-amazon-special-offer'
+                                }, el('span', {
                                     style: {
-                                        backgroundColor: buttonColor
+                                        backgroundColor: specialOfferColor
                                     }
-                                }, buttonText || 'Ver en Amazon')
+                                }, specialOfferText || product.specialOffer || 'Oferta')),
+                                
+                                // Botón "Ver en Amazon"
+                                showButton && el('div', { 
+                                    className: 'cosas-amazon-button'
+                                },
+                                    el('a', {
+                                        href: amazonUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                        className: 'cosas-amazon-btn',
+                                        style: {
+                                            backgroundColor: buttonColor
+                                        }
+                                    }, buttonText || 'Ver en Amazon')
+                                )
                             )
-                        )
+                        ] : [
+                            // Para otros estilos, mantener estructura original
+                            // Imagen del producto
+                            product.image && el('div', { 
+                                className: 'cosas-amazon-image'
+                            },
+                                el('img', {
+                                    src: product.image,
+                                    alt: product.title || 'Producto de Amazon'
+                                })
+                            ),
+                            // Etiqueta de oferta especial (entre imagen y contenido)
+                            showSpecialOffer && (specialOfferText || product.specialOffer) && el('div', {
+                                className: 'cosas-amazon-special-offer'
+                            }, el('span', {
+                                style: {
+                                    backgroundColor: specialOfferColor
+                                }
+                            }, specialOfferText || product.specialOffer || 'Oferta')),
+                            
+                            el('div', { 
+                                className: 'cosas-amazon-content'
+                            },
+                                product.title && el('h3', { 
+                                    className: 'cosas-amazon-title'
+                                }, product.title),
+                                
+                                // Valoraciones del producto
+                                areRatingsEnabled() && (product.rating || product.reviewCount) && el('div', { 
+                                    className: 'cosas-amazon-rating'
+                                },
+                                    product.rating && generateRatingStars(product.rating),
+                                    product.rating && el('span', { 
+                                        className: 'cosas-amazon-rating-number'
+                                    }, product.rating),
+                                    product.reviewCount && el('span', { 
+                                        className: 'cosas-amazon-review-count'
+                                    }, formatReviewCount(product.reviewCount))
+                                ),
+                                
+                                showDescription && product.description && displayStyle !== 'compact' && el('div', { 
+                                    className: 'cosas-amazon-description'
+                                }, product.description),
+                                
+                                (showPrice || showDiscount) && el('div', { 
+                                    className: 'cosas-amazon-pricing'
+                                },
+                                    showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { 
+                                        className: 'cosas-amazon-discount'
+                                    }, `-${product.discount}%`),
+                                    showPrice && product.price && el('span', { 
+                                        className: 'cosas-amazon-price'
+                                    }, product.price),
+                                    showPrice && product.originalPrice && el('span', { 
+                                        className: 'cosas-amazon-original-price'
+                                    }, product.originalPrice)
+                                ),
+                                
+                                // Botón "Ver en Amazon"
+                                showButton && el('div', { 
+                                    className: 'cosas-amazon-button'
+                                },
+                                    el('a', {
+                                        href: amazonUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                        className: 'cosas-amazon-btn',
+                                        style: {
+                                            backgroundColor: buttonColor
+                                        }
+                                    }, buttonText || 'Ver en Amazon')
+                                )
+                            )
+                        ])
                     )
                 );
             };
@@ -1069,14 +1607,129 @@
                         multipleProductsMode && el(SelectControl, {
                             label: 'Productos por fila',
                             value: productsPerRow,
-                            options: [
-                                { label: '2 productos', value: 2 },
-                                { label: '3 productos', value: 3 },
-                                { label: '4 productos', value: 4 },
-                                { label: '5 productos', value: 5 }
-                            ],
+                            options: (() => {
+                                // COMPORTAMIENTO ORIGINAL PARA ESTILO HORIZONTAL: máximo 2 productos
+                                if (displayStyle === 'horizontal') {
+                                    // Todos los tamaños horizontales: máximo 2 productos (ORIGINAL)
+                                    return [
+                                        { label: '1 producto', value: 1 },
+                                        { label: '2 productos', value: 2 }
+                                    ];
+                                }
+                                // LIMITACIONES PROGRESIVAS PARA VISTA COMPACTA
+                                else if (displayStyle === 'compact') {
+                                    switch(blockSize) {
+                                        case 'xlarge':
+                                        case 'large':
+                                            // Grande y Extragrande: máximo 2 productos
+                                            return [
+                                                { label: '1 producto', value: 1 },
+                                                { label: '2 productos', value: 2 }
+                                            ];
+                                        case 'medium':
+                                        case 'small':
+                                            // Medio y Pequeño: máximo 3 productos
+                                            return [
+                                                { label: '1 producto', value: 1 },
+                                                { label: '2 productos', value: 2 },
+                                                { label: '3 productos', value: 3 }
+                                            ];
+                                        default:
+                                            // Otros tamaños compactos: máximo 3
+                                            return [
+                                                { label: '1 producto', value: 1 },
+                                                { label: '2 productos', value: 2 },
+                                                { label: '3 productos', value: 3 }
+                                            ];
+                                    }
+                                }
+                                // LIMITACIONES PROGRESIVAS PARA VISTA VERTICAL (IGUAL QUE COMPACTA)
+                                else if (displayStyle === 'vertical') {
+                                    switch(blockSize) {
+                                        case 'xlarge':
+                                        case 'large':
+                                            // Grande y Extragrande: máximo 2 productos
+                                            return [
+                                                { label: '1 producto', value: 1 },
+                                                { label: '2 productos', value: 2 }
+                                            ];
+                                        case 'medium':
+                                        case 'small':
+                                            // Medio y Pequeño: máximo 3 productos
+                                            return [
+                                                { label: '1 producto', value: 1 },
+                                                { label: '2 productos', value: 2 },
+                                                { label: '3 productos', value: 3 }
+                                            ];
+                                        default:
+                                            // Otros tamaños verticales: máximo 3
+                                            return [
+                                                { label: '1 producto', value: 1 },
+                                                { label: '2 productos', value: 2 },
+                                                { label: '3 productos', value: 3 }
+                                            ];
+                                    }
+                                }
+                                // LIMITACIONES PARA VISTA MINIMAL: siempre 3 productos máximo
+                                else if (displayStyle === 'minimal') {
+                                    // Todos los tamaños minimal: máximo 3 productos
+                                    return [
+                                        { label: '1 producto', value: 1 },
+                                        { label: '2 productos', value: 2 },
+                                        { label: '3 productos', value: 3 }
+                                    ];
+                                }
+                                // Para estilos SIN limitaciones: opciones completas incluyendo 5
+                                return [
+                                    { label: '2 productos', value: 2 },
+                                    { label: '3 productos', value: 3 },
+                                    { label: '4 productos', value: 4 },
+                                    { label: '5 productos', value: 5 }
+                                ];
+                            })(),
                             onChange: (value) => setAttributes({ productsPerRow: parseInt(value) }),
-                            help: 'Selecciona cuántos productos mostrar por fila'
+                            help: (() => {
+                                if (displayStyle === 'horizontal') {
+                                    switch(blockSize) {
+                                        case 'xlarge':
+                                            return 'EXTRAGRANDE HORIZONTAL: Máximo 2 productos por fila permitidos';
+                                        case 'large':
+                                            return 'GRANDE HORIZONTAL: Máximo 2 productos por fila permitidos';
+                                        case 'medium':
+                                            return 'MEDIO HORIZONTAL: Máximo 3 productos por fila permitidos';
+                                        case 'small':
+                                            return 'PEQUEÑO HORIZONTAL: Máximo 4 productos por fila permitidos';
+                                        default:
+                                            return 'HORIZONTAL: Máximo 4 productos por fila (sin opción de 5)';
+                                    }
+                                } else if (displayStyle === 'compact') {
+                                    switch(blockSize) {
+                                        case 'xlarge':
+                                        case 'large':
+                                            return `${blockSize.toUpperCase()} COMPACTA: Máximo 2 productos por fila permitidos`;
+                                        case 'medium':
+                                        case 'small':
+                                            return `${blockSize.toUpperCase()} COMPACTA: Máximo 3 productos por fila permitidos`;
+                                        default:
+                                            return 'COMPACTA: Limitado según tamaño del bloque';
+                                    }
+                                } else if (displayStyle === 'vertical') {
+                                    switch(blockSize) {
+                                        case 'xlarge':
+                                        case 'large':
+                                            return `${blockSize.toUpperCase()} VERTICAL: Máximo 2 productos por fila permitidos`;
+                                        case 'medium':
+                                        case 'small':
+                                            return `${blockSize.toUpperCase()} VERTICAL: Máximo 3 productos por fila permitidos`;
+                                        default:
+                                            return 'VERTICAL: Limitado según tamaño del bloque';
+                                    }
+                                } else if (displayStyle === 'minimal') {
+                                    // Minimal siempre 3 productos máximo
+                                    return `${blockSize.toUpperCase()} MINIMAL: Máximo 3 productos por fila permitidos`;
+                                }
+                                return 'Selecciona cuántos productos mostrar por fila';
+                            })()
                         }),
                         
                         el(TextControl, {
@@ -1102,10 +1755,41 @@
                                 // Procesar las URLs separadas por líneas
                                 if (typeof value === 'string') {
                                     // Dividir por saltos de línea, limpiar espacios y filtrar URLs vacías
-                                    const urls = value
+                                    let urls = value
                                         .split('\n')
                                         .map(url => url.trim())
                                         .filter(url => url.length > 0);
+                                    
+                                    // LIMITACIONES: ORIGINAL para horizontal (max 2), PROGRESIVAS para compacta/vertical
+                                    if (displayStyle === 'horizontal') {
+                                        // COMPORTAMIENTO ORIGINAL HORIZONTAL: máximo 1 URL adicional (2 productos total)
+                                        let maxUrls = 1;
+                                        
+                                        if (urls.length > maxUrls) {
+                                            urls = urls.slice(0, maxUrls);
+                                            console.log(`⚠️ HORIZONTAL: Limitado a ${maxUrls} URL adicional (2 productos total) - COMPORTAMIENTO ORIGINAL`);
+                                        }
+                                    } else if (displayStyle === 'compact' || displayStyle === 'vertical') {
+                                        let maxUrls;
+                                        switch(blockSize) {
+                                            case 'xlarge':
+                                            case 'large':
+                                                maxUrls = 1; // 2 productos total (1 principal + 1 adicional)
+                                                break;
+                                            case 'medium':
+                                            case 'small':
+                                                maxUrls = 2; // 3 productos total (1 principal + 2 adicionales)
+                                                break;
+                                            default:
+                                                maxUrls = 2; // Máximo 3 productos para compacta/vertical por defecto
+                                                break;
+                                        }
+                                        
+                                        if (urls.length > maxUrls) {
+                                            urls = urls.slice(0, maxUrls);
+                                            console.log(`⚠️ ${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Limitado a ${maxUrls} URLs adicionales (${maxUrls + 1} productos total)`);
+                                        }
+                                    }
                                     
                                     console.log('📝 URLs procesadas:', urls);
                                     console.log('📝 Número de URLs:', urls.length);
@@ -1118,10 +1802,44 @@
                             },
                             placeholder: 'https://amzn.to/abc123\nhttps://amzn.to/def456\nhttps://amzn.to/ghi789',
                             help: multipleProductsMode ? 
-                                `Introduce cada URL en una línea nueva. URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}` :
+                                (() => {
+                                    if (displayStyle === 'horizontal') {
+                                        // COMPORTAMIENTO ORIGINAL HORIZONTAL: máximo 1 URL adicional (2 productos)
+                                        return `HORIZONTAL: Solo 1 URL adicional permitida (2 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                    } else if (displayStyle === 'compact' || displayStyle === 'vertical') {
+                                        switch(blockSize) {
+                                            case 'xlarge':
+                                            case 'large':
+                                                return `${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Solo 1 URL adicional permitida (2 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                            case 'medium':
+                                            case 'small':
+                                                return `${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Máximo 2 URLs adicionales permitidas (3 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                            default:
+                                                return `${displayStyle.toUpperCase()}: Máximo 2 URLs adicionales permitidas (3 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                        }
+                                    }
+                                    return `Introduce cada URL en una línea nueva. URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                })() :
                                 displayStyle === 'carousel' ? 
                                     `Para carousel se recomienda añadir al menos 2-3 URLs adicionales. URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}` :
-                                    'Introduce múltiples URLs, una en cada línea',
+                                    (() => {
+                                        if (displayStyle === 'horizontal') {
+                                            // COMPORTAMIENTO ORIGINAL HORIZONTAL: máximo 1 URL adicional (2 productos)
+                                            return `HORIZONTAL: Solo 1 URL adicional permitida (2 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                        } else if (displayStyle === 'compact' || displayStyle === 'vertical') {
+                                            switch(blockSize) {
+                                                case 'xlarge':
+                                                case 'large':
+                                                    return `${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Solo 1 URL adicional permitida (2 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                                case 'medium':
+                                                case 'small':
+                                                    return `${blockSize.toUpperCase()} ${displayStyle.toUpperCase()}: Máximo 2 URLs adicionales permitidas (3 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                                default:
+                                                    return `${displayStyle.toUpperCase()}: Máximo 2 URLs adicionales permitidas (3 productos máximo). URLs actuales: ${Array.isArray(amazonUrls) ? amazonUrls.length : 0}`;
+                                            }
+                                        }
+                                        return 'Introduce múltiples URLs, una en cada línea';
+                                    })(),
                             rows: 4,
                             spellCheck: false,
                             autoComplete: 'off'
