@@ -1,5 +1,7 @@
 # Cosas de Amazon - Un plugin para WordPress
 
+<img width="1024" height="1024" alt="logo" src="https://github.com/user-attachments/assets/41e86344-90d3-497d-98af-30fa1e165510" />
+
 Plugin para mostrar productos de Amazon con extracción avanzada de datos, múltiples estilos de visualización y sistema de limitaciones progresivas. Optimizado para Amazon España con soporte completo para formato europeo de precios.
 
 >!Nota Por el momento solo funciona correctamente la versíon de Scraping. La API de Amazon todavía no funciona.
