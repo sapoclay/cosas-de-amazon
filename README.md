@@ -57,19 +57,19 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos, múlt
 
 - **Tabla comparativa** - Comparación lado a lado hasta 6 columnas
 
-### ⚙️ Sistema de Limitaciones Progresivas
+### ⚙️ Sistema de limitaciones progresivas
 - **Validación dual** - Frontend (editor) y backend (renderizado)
 - **Dropdowns dinámicos** - Opciones que se adaptan al estilo y tamaño
 - **Grid responsivo** - Layout optimizado para múltiples productos
 - **Sincronización editor-frontend** - Vista previa exacta
 
-### 🔧 Integración WordPress
+### 🔧 Integración wordPress
 - **Bloque Gutenberg** nativo con editor visual sincronizado
 - **Shortcode tradicional** compatible con cualquier tema
 - **Responsive design** adaptado a todos los dispositivos
 - **Configuración avanzada** desde el panel de administración
 
-### 🛡️ Características Técnicas
+### 🛡️ Características técnicas
 - **Logging detallado** para diagnóstico y debugging
 - **Manejo de errores** robusto con fallbacks
 - **Optimización de rendimiento** con sistema de caché
@@ -94,37 +94,20 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos, múlt
 [cosas-amazon url="https://amzn.to/xxxxxxx" style="card"]
 ```
 
-### Múltiples Productos
+### Múltiples productos
 ```php
 [cosas-amazon url="https://amzn.to/xxxxxxx,https://amzn.to/yyyyyyy" style="carousel"]
 ```
 
-## 🎨 Estilos Disponibles
-
-### `compacto`
-Tarjeta pequeña y minimalista, ideal para barras laterales o contenido secundario.
-
-### `destacado`
-Tarjeta grande con imagen prominente, perfecta para contenido principal.
-
-### `muestra-minima`
-Vista reducida con elementos esenciales, útil para listas de productos.
-
-### `carousel`
-Desplazamiento horizontal con múltiples productos, con navegación por flechas.
-
-### `table`
-Tabla comparativa con columnas para imagen, título, valoración, precio, descuento y acción.
-
 ## ⚙️ Configuración
 
-### Opciones Generales
+### Opciones generales
 - **Duración de caché**: Tiempo de almacenamiento temporal (minutos)
 - **Timeout de scraping**: Límite de tiempo para extracción de datos
 - **Longitud de descripción**: Caracteres máximos en descripciones
 - **Fuente de datos**: Modo real o datos simulados para testing
 
-### Opciones de Visualización
+### Opciones de visualización
 - **Mostrar precio**: Activar/desactivar precios
 - **Mostrar descuento**: Mostrar información de descuentos
 - **Mostrar descripción**: Incluir descripción del producto
@@ -142,7 +125,7 @@ Tabla comparativa con columnas para imagen, título, valoración, precio, descue
 - PHP 7.4 o superior
 - Soporte para Gutenberg
 
-### Hooks y Filtros
+### Hooks y filtros
 El plugin incluye varios hooks para personalización:
 - `cosas_amazon_before_render`
 - `cosas_amazon_after_render`
@@ -164,24 +147,24 @@ Puedes personalizar los estilos añadiendo CSS adicional en tu tema:
 ## Soporte
 
 Para soporte técnico o reportar bugs:
-### Configuración Avanzada
+### Configuración avanzada
 - **Debugging**: Activar logs detallados para diagnóstico
 - **Caché personalizado**: Configurar tiempo de vida del caché
 - **Fallbacks de imagen**: Imágenes por defecto por categoría
 
 ## 🌐 Compatibilidad
 
-### Sitios Amazon Soportados
+### Sitios Amazon soportados
 - **Amazon España** (.es) - Optimizado
 
 
-### URLs Soportadas
+### URLs soportadas
 - URLs completas de Amazon
 - URLs cortas (amzn.to, a.co)
 - Enlaces con parámetros de afiliado
 - Enlaces directos a productos
 
-### Formatos de Precio
+### Formatos de precio
 - **Formato europeo**: 1.234,56€
 - **Formato estadounidense**: $1,234.56
 - **Formato británico**: £1,234.56
@@ -189,7 +172,7 @@ Para soporte técnico o reportar bugs:
 
 ## 🔧 Personalización
 
-### CSS Personalizado
+### CSS personalizado
 El plugin incluye estilos propios que se pueden personalizar:
 
 ```css
@@ -230,6 +213,9 @@ add_filter('cosas_amazon_output_html', 'mi_html_personalizado');
 - **Errores de formato**: Revisar configuración regional
 
 ### Debugging
+
+<img width="338" height="578" alt="diagnositico" src="https://github.com/user-attachments/assets/b133e0bf-d592-4c87-876e-716c7c9a1128" />
+
 Activar el modo debug en la configuración del plugin para obtener información detallada sobre el procesamiento.
 
 ## 📄 Licencia
