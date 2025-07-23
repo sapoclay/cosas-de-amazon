@@ -29,12 +29,18 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos, múlt
 - **Caché inteligente** para optimizar rendimiento
 
 ### 🎨 Estilos de Visualización
+<img width="574" height="291" alt="horizontal" src="https://github.com/user-attachments/assets/c3782d5d-1d47-4495-9bfe-8ef806d6a825" />
 - **Horizontal** - Layout tradicional con imagen izquierda (máx. 2 productos)
 - **Compacta** - Diseño minimalista con limitaciones progresivas (2-3 productos)
+  <img width="768" height="588" alt="vertical" src="https://github.com/user-attachments/assets/8293a60b-5ec0-455d-983f-389769aa23ad" />
 - **Vertical** - Vista centrada con limitaciones progresivas (2-3 productos)
+  <img width="813" height="484" alt="minima" src="https://github.com/user-attachments/assets/223375cd-27b9-4dfd-b673-cb405704ed37" />
 - **Muestra mínima** - Vista reducida con estructura columnar (máx. 3 productos)
+  <img width="819" height="504" alt="carousel" src="https://github.com/user-attachments/assets/78c05e66-1796-4f50-82b4-170b79af940c" />
 - **Carousel responsive** - Desplazamiento horizontal sin limitaciones
+  <img width="806" height="687" alt="destacados" src="https://github.com/user-attachments/assets/f9e2240c-5316-4a86-a959-3851d22662e7" />
 - **Destacada** - Formato grande con gradiente
+  <img width="776" height="700" alt="tabla" src="https://github.com/user-attachments/assets/b3c524a3-80f7-4aff-ac26-28c9f3737841" />
 - **Tabla comparativa** - Comparación lado a lado hasta 6 columnas
 
 ### ⚙️ Sistema de Limitaciones Progresivas
