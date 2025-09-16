@@ -77,6 +77,33 @@ class CosasAmazonHelpers {
         
         return $price;
     }
+
+    /**
+     * Normalizar precio para mostrar en formato español con símbolo de euro y sin caracteres invisibles.
+     * Resultado: "1.234,56 €"
+     */
+    public static function normalize_price_display($price) {
+        if (empty($price)) { return ''; }
+        $s = html_entity_decode((string)$price, ENT_QUOTES, 'UTF-8');
+        // Eliminar BOM/ZW y caracteres invisibles: FEFF, ZWSP/ZWNJ/ZWJ, soft hyphen; convertir NBSP/narrow NBSP a espacio normal; quitar � (FFFD)
+        $s = preg_replace('/[\x{FEFF}\x{200B}-\x{200D}\x{00AD}\x{FFFD}]/u', '', $s);
+        $s = preg_replace('/[\x{00A0}\x{202F}]/u', ' ', $s);
+        $s = preg_replace('/\s+/u', ' ', $s);
+        $s = trim($s);
+        // Extraer valor numérico y formatear a es_ES (coma decimal, punto miles)
+        $value = self::extract_numeric_price($s);
+        if ($value > 0) {
+            $formatted = number_format($value, 2, ',', '.');
+            return $formatted . ' €';
+        }
+        // Si no pudimos parsear, al menos asegurar símbolo € y quitar artefactos
+        if (strpos($s, '€') === false && preg_match('/[0-9]/', $s)) {
+            $s = $s . ' €';
+        }
+        // Si viene como "€ 12,34" convertir a "12,34 €"
+        $s = preg_replace('/^€\s*(.+)$/u', '$1 €', $s);
+        return trim($s);
+    }
     
     /**
      * Obtener datos del producto desde caché
@@ -87,6 +114,17 @@ class CosasAmazonHelpers {
         
         if ($cached_data && is_array($cached_data)) {
             self::log_debug('Datos encontrados en caché para ASIN: ' . $asin);
+            // Validar caché cuando hay descuento para evitar falsos positivos por precio por unidad
+            if (self::is_strict_discount_validation_enabled() && !empty($cached_data['discount'])) {
+                $title = isset($cached_data['title']) ? $cached_data['title'] : '';
+                $orig = isset($cached_data['originalPrice']) ? $cached_data['originalPrice'] : '';
+                $price = isset($cached_data['price']) ? $cached_data['price'] : '';
+                if (self::is_suspicious_unit_price_context($title, $orig, $price)) {
+                    self::log_debug('❌ Caché descartada: descuento sospechoso por precio por unidad');
+                    delete_transient($cache_key);
+                    return false;
+                }
+            }
             return $cached_data;
         }
         
@@ -467,6 +505,44 @@ class CosasAmazonHelpers {
         // Parsear el HTML para extraer datos
         return self::parse_amazon_html($html, $asin, $url);
     }
+
+    /**
+     * Heurística: detectar contexto de precio por unidad (ml, L, kg, pack, xN) y ratios sospechosos
+     */
+    public static function is_suspicious_unit_price_context($title, $original_price_str, $current_price_str) {
+        $title_lc = mb_strtolower($title ?? '');
+        $looks_like_unit = false;
+        if (!empty($title_lc)) {
+            $unit_patterns = [
+                '/\b\d+\s?(ml|l|litro|litros|kg|g)\b/i',
+                '/\bpor\s?(100|1\s?l|1\s?kg|kg|l)\b/i',
+                '/\bpack\b/i',
+                '/\b\d+\s?x\b/i',
+                '/\b\d+\s?(unidades|unidad|capsulas|cápsulas|tabletas)\b/i',
+                '/\b\d+\s?(ml|g)\s?(cada|c\/u)\b/i'
+            ];
+            foreach ($unit_patterns as $p) {
+                if (preg_match($p, $title_lc)) { $looks_like_unit = true; break; }
+            }
+        }
+        // También detectar en el string del original si parece €/L, €/kg, €/100ml
+        $orig_lc = mb_strtolower($original_price_str ?? '');
+        if (!$looks_like_unit && $orig_lc) {
+            if (preg_match('/(€|eur)\s*\/\s*(l|kg|100\s?g|100\s?ml)/i', $orig_lc)) {
+                $looks_like_unit = true;
+            }
+        }
+        $current = self::extract_numeric_price($current_price_str);
+        $original = self::extract_numeric_price($original_price_str);
+        $suspicious_ratio = false;
+        if ($current > 0 && $original > 0 && $original > $current) {
+            $ratio = $original / $current;
+            if (($ratio >= 3.5 && $ratio <= 4.5) || $ratio >= 8) {
+                $suspicious_ratio = true;
+            }
+        }
+        return ($looks_like_unit && $suspicious_ratio);
+    }
     
     /**
      * Parsear HTML de Amazon para extraer datos del producto
@@ -765,13 +841,21 @@ class CosasAmazonHelpers {
             self::log_debug("Comparando precios - Actual: $current_price, Original: $original_price");
             
             if ($current_price > 0 && $original_price > 0 && $original_price > $current_price) {
-                $discount = round((($original_price - $current_price) / $original_price) * 100);
-                // Solo asignar descuento si es un valor razonable (entre 1% y 90%)
-                if ($discount >= 1 && $discount <= 90) {
-                    $product_data['discount'] = $discount;
-                    self::log_debug("✅ Descuento calculado desde precios: {$discount}%");
+                // Heurística anti-precio por unidad
+                if (self::is_suspicious_unit_price_context($product_data['title'], $product_data['originalPrice'], $product_data['price'])) {
+                    self::log_debug('❌ Descuento descartado por heurística de precio por unidad');
+                    $product_data['discount'] = '';
+                    $product_data['originalPrice'] = '';
+                    $found_original_price = false;
                 } else {
-                    self::log_debug("❌ Descuento inválido calculado: {$discount}%");
+                    $discount = round((($original_price - $current_price) / $original_price) * 100);
+                    // Solo asignar descuento si es un valor razonable (entre 1% y 90%)
+                    if ($discount >= 1 && $discount <= 90) {
+                        $product_data['discount'] = $discount;
+                        self::log_debug("✅ Descuento calculado desde precios: {$discount}%");
+                    } else {
+                        self::log_debug("❌ Descuento inválido calculado: {$discount}%");
+                    }
                 }
             } else {
                 self::log_debug("❌ No hay diferencia de precio válida para descuento");
@@ -1642,46 +1726,138 @@ class CosasAmazonHelpers {
             return $url; // No es URL corta, devolver la original
         }
         
-        self::log_debug("Intentando resolver URL corta: $url");
-        
-        // Método 1: Usar cURL para seguir redirects con mejor configuración
+    self::log_debug("Intentando resolver URL corta: $url");
+
+        // Método 1: cURL con GET real y follow redirects (más compatible que HEAD)
         if (function_exists('curl_init')) {
             $curl = curl_init();
             curl_setopt($curl, CURLOPT_URL, $url);
             curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($curl, CURLOPT_MAXREDIRS, 10); // Aumentar redirects
-            curl_setopt($curl, CURLOPT_TIMEOUT, 20); // Más tiempo
-            curl_setopt($curl, CURLOPT_NOBODY, true); // Solo headers
+            curl_setopt($curl, CURLOPT_MAXREDIRS, 10);
+            curl_setopt($curl, CURLOPT_TIMEOUT, 20);
             curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
-            // Añadir headers adicionales para ser más convincente
+            // Realizar GET pero limitar el cuerpo al primer byte para no descargar toda la página
+            curl_setopt($curl, CURLOPT_HTTPGET, true);
+            curl_setopt($curl, CURLOPT_RANGE, '0-0');
+            // Evitar compresión compleja
+            curl_setopt($curl, CURLOPT_ENCODING, '');
+            // Headers típicos de navegador
             curl_setopt($curl, CURLOPT_HTTPHEADER, [
                 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language: es-ES,es;q=0.9,en;q=0.8',
-                'Accept-Encoding: gzip, deflate, br',
                 'Connection: keep-alive',
-                'Upgrade-Insecure-Requests: 1',
-                'Sec-Fetch-Dest: document',
-                'Sec-Fetch-Mode: navigate',
-                'Sec-Fetch-Site: none',
-                'Sec-Fetch-User: ?1'
             ]);
-            
-            $response = curl_exec($curl);
+
+            $response = @curl_exec($curl);
             $final_url = curl_getinfo($curl, CURLINFO_EFFECTIVE_URL);
             $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $curl_err = curl_error($curl);
             curl_close($curl);
-            
-            self::log_debug("URL resuelta con cURL: $final_url (HTTP: $http_code)");
-            
-            if (!empty($final_url) && $http_code >= 200 && $http_code < 400) {
+
+            self::log_debug("URL resuelta con cURL(GET): $final_url (HTTP: $http_code)", $curl_err ?: null);
+
+            if (!empty($final_url) && $http_code >= 200 && $http_code < 400 && $final_url !== $url) {
+                return $final_url;
+            }
+
+            // Si GET no funcionó, intentar HEAD como fallback
+            $curl = curl_init();
+            curl_setopt($curl, CURLOPT_URL, $url);
+            curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($curl, CURLOPT_MAXREDIRS, 10);
+            curl_setopt($curl, CURLOPT_TIMEOUT, 20);
+            curl_setopt($curl, CURLOPT_NOBODY, true);
+            curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
+
+            @curl_exec($curl);
+            $final_url = curl_getinfo($curl, CURLINFO_EFFECTIVE_URL);
+            $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $curl_err = curl_error($curl);
+            curl_close($curl);
+
+            self::log_debug("URL resuelta con cURL(HEAD): $final_url (HTTP: $http_code)", $curl_err ?: null);
+
+            if (!empty($final_url) && $http_code >= 200 && $http_code < 400 && $final_url !== $url) {
                 return $final_url;
             }
         }
         
-        // Método 2: Usar get_headers como fallback
+        // Método 2: Usar la API HTTP de WordPress (HEAD manual con seguimiento) si está disponible
+        if (function_exists('wp_remote_head') && function_exists('wp_remote_retrieve_response_code')) {
+            $current = $url;
+            $maxHops = 8;
+            for ($i = 0; $i < $maxHops; $i++) {
+                $response = @wp_remote_head($current, array(
+                    'timeout' => 15,
+                    'redirection' => 0,
+                    'sslverify' => false,
+                    'headers' => array(
+                        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    ),
+                ));
+                if (is_wp_error($response)) {
+                    break;
+                }
+                $code = intval(wp_remote_retrieve_response_code($response));
+                $loc = wp_remote_retrieve_header($response, 'location');
+                if (in_array($code, array(301, 302, 303, 307, 308)) && !empty($loc)) {
+                    // Resolver relativa si aplica
+                    if (strpos($loc, 'http') !== 0) {
+                        $p = parse_url($current);
+                        $scheme = isset($p['scheme']) ? $p['scheme'] : 'https';
+                        $host = isset($p['host']) ? $p['host'] : '';
+                        $loc = rtrim($scheme . '://' . $host, '/') . '/' . ltrim($loc, '/');
+                    }
+                    $current = $loc;
+                    continue;
+                }
+                if ($code >= 200 && $code < 400) {
+                    // Si ya no es dominio corto, damos por resuelta
+                    $h = parse_url($current, PHP_URL_HOST);
+                    if ($h && !in_array(strtolower($h), $short_domains)) {
+                        self::log_debug("URL resuelta con WP HTTP API (HEAD): $current (HTTP: $code)");
+                        return $current;
+                    }
+                }
+                break; // No más redirecciones
+            }
+
+            // Intentar GET sin seguir redirecciones para obtener Location en algunos hosts
+            if (function_exists('wp_remote_get')) {
+                $response = @wp_remote_get($url, array(
+                    'timeout' => 15,
+                    'redirection' => 0,
+                    'sslverify' => false,
+                    'headers' => array(
+                        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    ),
+                ));
+                if (!is_wp_error($response)) {
+                    $code = intval(wp_remote_retrieve_response_code($response));
+                    $loc = wp_remote_retrieve_header($response, 'location');
+                    if (in_array($code, array(301,302,303,307,308)) && !empty($loc)) {
+                        if (strpos($loc, 'http') !== 0) {
+                            $p = parse_url($url);
+                            $scheme = isset($p['scheme']) ? $p['scheme'] : 'https';
+                            $host = isset($p['host']) ? $p['host'] : '';
+                            $loc = rtrim($scheme . '://' . $host, '/') . '/' . ltrim($loc, '/');
+                        }
+                        self::log_debug("URL resuelta con WP HTTP API (GET): $loc (HTTP: $code)");
+                        return $loc;
+                    }
+                }
+            }
+        }
+
+        // Método 3: Usar get_headers como fallback final
         $context = stream_context_create([
             'http' => [
                 'method' => 'HEAD',
@@ -1708,7 +1884,7 @@ class CosasAmazonHelpers {
             }
         }
         
-        // Método 3: Construcción manual para URLs conocidas
+        // Método 4: Construcción manual para URLs conocidas
         if (strpos($url, 'amzn.to') !== false) {
             // Intentar extraer información de la URL corta
             $path_parts = explode('/', parse_url($url, PHP_URL_PATH));

@@ -37,6 +37,11 @@ class CosasDeAmazon {
             'buttonColor' => isset($options['default_button_color']) ? $options['default_button_color'] : '#FF9900',
             'showSpecialOffer' => isset($options['show_special_offer_by_default']) ? $options['show_special_offer_by_default'] : true,
             'specialOfferColor' => isset($options['default_special_offer_color']) ? $options['default_special_offer_color'] : '#e74c3c',
+            'priceColor' => '#B12704',
+            'discountColor' => '#d93025',
+            'originalPriceColor' => '#999999',
+            'featuredBackgroundColor' => '',
+            'featuredBackgroundGradient' => '',
             'blockSize' => isset($options['default_block_size']) ? $options['default_block_size'] : 'medium',
             'productsPerRow' => isset($options['default_products_per_row']) ? intval($options['default_products_per_row']) : 2
         );
@@ -74,16 +79,25 @@ class CosasDeAmazon {
                     'showButton' => array('type' => 'boolean', 'default' => $defaults['showButton']),
                     'buttonText' => array('type' => 'string', 'default' => $defaults['buttonText']),
                     'buttonColor' => array('type' => 'string', 'default' => $defaults['buttonColor']),
+                    'priceColor' => array('type' => 'string', 'default' => '#B12704'),
+                    'discountColor' => array('type' => 'string', 'default' => $defaults['discountColor']),
+                    'originalPriceColor' => array('type' => 'string', 'default' => $defaults['originalPriceColor']),
+                    'featuredBackgroundColor' => array('type' => 'string', 'default' => $defaults['featuredBackgroundColor']),
+                    'featuredBackgroundGradient' => array('type' => 'string', 'default' => $defaults['featuredBackgroundGradient']),
+                    'debugMode' => array('type' => 'boolean', 'default' => false),
                     'showSpecialOffer' => array('type' => 'boolean', 'default' => $defaults['showSpecialOffer']),
                     'specialOfferText' => array('type' => 'string', 'default' => ''),
                     'specialOfferColor' => array('type' => 'string', 'default' => $defaults['specialOfferColor']),
                     'multipleProductsMode' => array('type' => 'boolean', 'default' => false),
-                    'productsPerRow' => array('type' => 'number', 'default' => $defaults['productsPerRow'])
+                    'productsPerRow' => array('type' => 'number', 'default' => $defaults['productsPerRow']),
+                    'modifiedAttributes' => array('type' => 'array', 'default' => array())
                 )
             )
         );
         // Registrar shortcode principal para el plugin
         add_shortcode('amazon_producto', array($this, 'shortcode_amazon_producto'));
+    // Alias de compatibilidad con la documentación
+    add_shortcode('cosas-amazon', array($this, 'shortcode_amazon_producto'));
         // Registrar shortcode para testing
         add_shortcode('cosas_amazon_test', array($this, 'shortcode_test_product'));
     }
@@ -138,6 +152,14 @@ class CosasDeAmazon {
             COSAS_AMAZON_VERSION . '-' . time(), // Forzar recarga JS también
             true
         );
+        // Encolar el JS del carrusel también en el editor para vista previa funcional
+        wp_enqueue_script(
+            'cosas-amazon-carousel',
+            COSAS_AMAZON_PLUGIN_URL . 'assets/js/carousel.js',
+            array('jquery'),
+            COSAS_AMAZON_VERSION . '-' . time(),
+            true
+        );
         $plugin_options = get_option('cosas_amazon_options', array());
         wp_localize_script('cosas-amazon-block-editor', 'cosasAmazonAjax', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
@@ -169,6 +191,14 @@ class CosasDeAmazon {
             COSAS_AMAZON_PLUGIN_URL . 'assets/css/editor.css',
             array('wp-edit-blocks', 'wp-block-editor', 'wp-block-library'),
             COSAS_AMAZON_VERSION . '-' . time(), // Forzar recarga con timestamp
+            'all'
+        );
+        // Cargar también el CSS del frontend en el editor para que coincidan los estilos visuales
+        wp_enqueue_style(
+            'cosas-amazon-block-style',
+            COSAS_AMAZON_PLUGIN_URL . 'assets/css/style.css',
+            array('cosas-amazon-block-editor-style'),
+            COSAS_AMAZON_VERSION . '-' . time(),
             'all'
         );
         
@@ -361,6 +391,14 @@ class CosasDeAmazon {
      */
     private function merge_attributes_with_defaults($block_attributes, $global_defaults) {
         $merged = array();
+
+        // Atributos marcados explícitamente como modificados desde el editor (tienen prioridad absoluta)
+        $explicit_modified = array();
+        if (isset($block_attributes['modifiedAttributes']) && is_array($block_attributes['modifiedAttributes'])) {
+            foreach ($block_attributes['modifiedAttributes'] as $mAttr) {
+                $explicit_modified[$mAttr] = true;
+            }
+        }
         
         // Verificar configuración de producción
         $production_config = get_option('cosas_amazon_production_config', []);
@@ -369,13 +407,16 @@ class CosasDeAmazon {
         // Lista de atributos que deben aplicar configuración global si no se han modificado
         $configurable_attributes = array(
             'displayStyle', 'blockSize', 'showPrice', 'showDiscount', 'showDescription',
-            'descriptionLength', 'color', 'fontSize', 'borderStyle', 'borderColor',
+            'descriptionLength', 'color', 'fontSize', 'borderStyle', 'borderColor', 'priceColor', 'discountColor', 'originalPriceColor', 'featuredBackgroundColor', 'featuredBackgroundGradient',
             'backgroundColor', 'alignment', 'showButton', 'buttonText', 'buttonColor',
             'showSpecialOffer', 'specialOfferColor', 'productsPerRow'
         );
         
         foreach ($configurable_attributes as $attr) {
-            if (isset($block_attributes[$attr]) && $this->attribute_has_been_modified($block_attributes, $attr)) {
+            if (isset($explicit_modified[$attr]) && isset($block_attributes[$attr])) {
+                // Marcado como modificado manualmente: usar siempre el valor del bloque
+                $merged[$attr] = $block_attributes[$attr];
+            } elseif (isset($block_attributes[$attr]) && $this->attribute_has_been_modified($block_attributes, $attr)) {
                 // El usuario ha modificado este atributo, usar el valor del bloque
                 $merged[$attr] = $block_attributes[$attr];
             } else {
@@ -475,7 +516,13 @@ class CosasDeAmazon {
         if ($attributes['borderStyle'] !== 'none') {
             $html .= 'border: 1px ' . esc_attr($attributes['borderStyle']) . ' ' . esc_attr($attributes['borderColor']) . '; ';
         }
-        $html .= 'background-color: ' . esc_attr($attributes['backgroundColor']) . '; ';
+        if ($attributes['displayStyle'] === 'featured' && !empty($attributes['featuredBackgroundGradient'])) {
+            $html .= 'background: ' . esc_attr($attributes['featuredBackgroundGradient']) . '; ';
+        } elseif ($attributes['displayStyle'] === 'featured' && !empty($attributes['featuredBackgroundColor'])) {
+            $html .= 'background: ' . esc_attr($attributes['featuredBackgroundColor']) . '; ';
+        } else {
+            $html .= 'background-color: ' . esc_attr($attributes['backgroundColor']) . '; ';
+        }
         $html .= 'color: ' . esc_attr($attributes['color']) . '; ';
         $html .= 'font-size: ' . esc_attr($attributes['fontSize']) . '; ';
         $html .= 'text-align: ' . esc_attr($attributes['alignment']) . ' !important;';
@@ -559,15 +606,15 @@ class CosasDeAmazon {
                 
                 // Descuento si existe
                 if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
-                    $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+                    $html .= '<span class="cosas-amazon-discount" style="background-color:' . esc_attr($attributes['discountColor']) . ';">-' . esc_html($product_data['discount']) . '%</span>';
                 }
                 
                 // Precio actual
-                $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
+                $html .= '<span class="cosas-amazon-price" style="color:' . esc_attr($attributes['priceColor']) . ';">' . esc_html($product_data['price']) . '</span>';
                 
                 // Precio original si existe
                 if (!empty($product_data['originalPrice'])) {
-                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</span>';
+                    $html .= '<span class="cosas-amazon-original-price" style="color:' . esc_attr($attributes['originalPriceColor']) . ';">' . esc_html($product_data['originalPrice']) . '</span>';
                 }
                 
                 $html .= '</div>';
@@ -641,15 +688,15 @@ class CosasDeAmazon {
                 
                 // Descuento si existe
                 if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
-                    $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+                    $html .= '<span class="cosas-amazon-discount" style="background-color:' . esc_attr($attributes['discountColor']) . ';">-' . esc_html($product_data['discount']) . '%</span>';
                 }
                 
                 // Precio actual
-                $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
+                $html .= '<span class="cosas-amazon-price" style="color:' . esc_attr($attributes['priceColor']) . ';">' . esc_html($product_data['price']) . '</span>';
                 
                 // Precio original si existe
                 if (!empty($product_data['originalPrice'])) {
-                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</span>';
+                    $html .= '<span class="cosas-amazon-original-price" style="color:' . esc_attr($attributes['originalPriceColor']) . ';">' . esc_html($product_data['originalPrice']) . '</span>';
                 }
                 
                 $html .= '</div>';
@@ -659,8 +706,20 @@ class CosasDeAmazon {
             
             // Botón centrado en la parte inferior
             if ($attributes['showButton'] && !empty($amazon_url)) {
+                $user_modified_button = false;
+                if (isset($attributes['modifiedAttributes']) && is_array($attributes['modifiedAttributes'])) {
+                    $user_modified_button = in_array('buttonColor', $attributes['modifiedAttributes'], true);
+                }
+                $btn_style = '';
+                if ($user_modified_button && !empty($attributes['buttonColor'])) {
+                    $text_color = $this->get_contrasting_text_color($attributes['buttonColor']);
+                    $btn_style = 'background-color: ' . esc_attr($attributes['buttonColor']) . '; color: ' . esc_attr($text_color) . ';';
+                } else {
+                    $auto = $this->compute_featured_button_styles($attributes);
+                    $btn_style = 'background: ' . esc_attr($auto['background']) . '; color: ' . esc_attr($auto['color']) . '; border: ' . esc_attr($auto['border']) . ';';
+                }
                 $html .= '<div class="cosas-amazon-button">';
-                $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="nofollow" class="cosas-amazon-btn" style="background-color: ' . esc_attr($attributes['buttonColor']) . ';">';
+                $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="nofollow" class="cosas-amazon-btn" style="' . $btn_style . '">';
                 $html .= esc_html($attributes['buttonText']);
                 $html .= '</a>';
                 $html .= '</div>';
@@ -689,7 +748,7 @@ class CosasDeAmazon {
             
             // Precio del producto
             if ($attributes['showPrice'] && !empty($product_data['price'])) {
-                $html .= '<div class="cosas-amazon-price">' . esc_html($product_data['price']) . '</div>';
+                $html .= '<div class="cosas-amazon-price" style="color:' . esc_attr($attributes['priceColor']) . ';">' . esc_html($product_data['price']) . '</div>';
             }
             
             // Línea de descuento y precio anterior
@@ -703,7 +762,7 @@ class CosasDeAmazon {
                 
                 // Precio original si existe
                 if (!empty($product_data['originalPrice'])) {
-                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</span>';
+                    $html .= '<span class="cosas-amazon-original-price" style="color:' . esc_attr($attributes['originalPriceColor']) . ';">' . esc_html($product_data['originalPrice']) . '</span>';
                 }
                 
                 $html .= '</div>';
@@ -743,8 +802,7 @@ class CosasDeAmazon {
             $html .= '</div>'; // Cerrar main-content
             
         } elseif ($attributes['displayStyle'] === 'carousel') {
-            // Para carousel individual (cuando solo hay un producto)
-            // Aplicar wrapper de alineación igual que otros estilos
+            // Carousel individual (cuando solo hay un producto) con estructura compatible con JS/CSS del carousel
             $wrapper_styles = 'display: flex; width: 100%; ';
             switch ($attributes['alignment']) {
                 case 'left':
@@ -758,14 +816,20 @@ class CosasDeAmazon {
                     $wrapper_styles .= 'justify-content: center;';
                     break;
             }
-            
+
             $alignment_class = 'cosas-amazon-align-' . esc_attr($attributes['alignment']);
             $html = '<div style="' . esc_attr($wrapper_styles) . '">';
-            $html .= '<div class="cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . ' ' . $alignment_class . '">';
+            $html .= '<div class="cosas-amazon-products-carousel ' . $alignment_class . '">';
+            $html .= '<div class="cosas-amazon-carousel-container cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . '">';
             $html .= $this->render_carousel_item($product_data, $amazon_url, $attributes);
-            $html .= '</div>'; // Cerrar carousel
-            $html .= '</div>'; // Cerrar wrapper
-            
+            $html .= '</div>'; // container
+            $html .= '<div class="cosas-amazon-carousel-controls">';
+            $html .= '<button type="button" class="cosas-amazon-carousel-prev" onclick="window.cosasAmazonCarousel.prev(this)">‹</button>';
+            $html .= '<button type="button" class="cosas-amazon-carousel-next" onclick="window.cosasAmazonCarousel.next(this)">›</button>';
+            $html .= '</div>';
+            $html .= '</div>'; // wrapper productos-carousel
+            $html .= '</div>'; // wrapper de alineación
+
             return $html;
             
         } else {
@@ -819,18 +883,17 @@ class CosasDeAmazon {
         // Precio del producto
         if ($attributes['showPrice'] && !empty($product_data['price'])) {
             $html .= '<div class="cosas-amazon-pricing">';
-            
-            // Precio actual
-            $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
-            
-            // Precio original si existe
-            if (!empty($product_data['originalPrice'])) {
-                $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</span>';
-            }
-            
-            // Descuento si existe
+            // Descuento primero (alineado con el editor)
             if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
                 $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+            }
+
+            // Precio actual
+            $html .= '<span class="cosas-amazon-price" style="color:' . esc_attr($attributes['priceColor']) . ';">' . esc_html($product_data['price']) . '</span>';
+
+            // Precio original si existe
+            if (!empty($product_data['originalPrice'])) {
+                $html .= '<span class="cosas-amazon-original-price" style="color:' . esc_attr($attributes['originalPriceColor']) . ';">' . esc_html($product_data['originalPrice']) . '</span>';
             }
             
             $html .= '</div>';
@@ -887,24 +950,33 @@ class CosasDeAmazon {
                 break;
         }
         
-        // Crear el wrapper con alineación
-        $html = '<div style="' . esc_attr($wrapper_styles) . '">';
+    // Crear el wrapper con alineación
+    $html = '<div style="' . esc_attr($wrapper_styles) . '">';
         
-        // Crear el contenedor del carousel con clase de alineación
-        $alignment_class = 'cosas-amazon-align-' . esc_attr($attributes['alignment']);
-        $html .= '<div class="cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . ' ' . $alignment_class . '">';
+    // Wrapper de productos carousel y container de ítems
+    $alignment_class = 'cosas-amazon-align-' . esc_attr($attributes['alignment']);
+    $html .= '<div class="cosas-amazon-products-carousel ' . $alignment_class . '">';
+    $html .= '<div class="cosas-amazon-carousel-container cosas-amazon-carousel cosas-amazon-size-' . esc_attr($attributes['blockSize']) . '">';
         
         foreach ($urls_array as $index => $url) {
             $product_data = null;
-            
+
             // Obtener datos del producto del array products_data o por índice
             if (!empty($products_data) && is_array($products_data)) {
                 $product_data = isset($products_data[$index]) ? $products_data[$index] : null;
             }
-            
+
+            // Si faltan datos, intentar obtenerlos directamente por URL (por ejemplo, tras añadir una URL corta nueva)
+            if (empty($product_data) && function_exists('cosas_amazon_get_product_data')) {
+                $fetched = cosas_amazon_get_product_data($url);
+                if (!empty($fetched)) {
+                    $product_data = $fetched;
+                }
+            }
+
             // Normalizar datos del producto
             $product_data = $this->normalize_product_data($product_data);
-            
+
             if (!empty($product_data) && is_array($product_data)) {
                 $html .= $this->render_carousel_item($product_data, $url, $attributes);
             } else {
@@ -913,8 +985,14 @@ class CosasDeAmazon {
             }
         }
         
-        $html .= '</div>'; // Cerrar carousel
-        $html .= '</div>'; // Cerrar wrapper
+    $html .= '</div>'; // Cerrar container
+    // Controles prev/next
+    $html .= '<div class="cosas-amazon-carousel-controls">';
+    $html .= '<button type="button" class="cosas-amazon-carousel-prev" onclick="window.cosasAmazonCarousel.prev(this)">‹</button>';
+    $html .= '<button type="button" class="cosas-amazon-carousel-next" onclick="window.cosasAmazonCarousel.next(this)">›</button>';
+    $html .= '</div>';
+    $html .= '</div>'; // Cerrar wrapper productos-carousel
+    $html .= '</div>'; // Cerrar wrapper
         
         return $html;
     }
@@ -992,30 +1070,45 @@ class CosasDeAmazon {
             $html .= '</div>';
         }
         
-        // 5. Precio del producto
+        // 5. Precio del producto (normalizado a formato español con €)
         if ($attributes['showPrice'] && !empty($product_data['price'])) {
-            $html .= '<div class="cosas-amazon-price">' . esc_html($product_data['price']) . '</div>';
+            $price_display = CosasAmazonHelpers::normalize_price_display($product_data['price']);
+            $html .= '<div class="cosas-amazon-price" style="color:' . esc_attr($attributes['priceColor']) . ';">' . esc_html($price_display) . '</div>';
         }
         
         // 6. Descuento (si existe)
-        if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
-            $html .= '<div class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</div>';
+                if ($attributes['showDiscount'] && !empty($product_data['discount'])) {
+                    $html .= '<div class="cosas-amazon-discount" style="background-color:' . esc_attr($attributes['discountColor']) . ';">-' . esc_html($product_data['discount']) . '%</div>';
         }
         
         // 7. Precio original (si existe)
         if (!empty($product_data['originalPrice'])) {
-            $html .= '<div class="cosas-amazon-original-price">' . esc_html($product_data['originalPrice']) . '</div>';
+            $orig_display = is_string($product_data['originalPrice']) ? CosasAmazonHelpers::normalize_price_display($product_data['originalPrice']) : '';
+            if (!empty($orig_display)) {
+                $html .= '<div class="cosas-amazon-original-price" style="color:' . esc_attr($attributes['originalPriceColor']) . ';">' . esc_html($orig_display) . '</div>';
+            }
         }
         
-        // 8. Botón Ver en Amazon
+        // 8. Descripción (fallback si no viene)
+        $desc = '';
+        if (!empty($product_data['description'])) {
+            $desc = (string)$product_data['description'];
+        } else if (!empty($product_data['asin']) && method_exists('CosasAmazonHelpers', 'get_fallback_description')) {
+            $desc = CosasAmazonHelpers::get_fallback_description($product_data['asin']);
+        }
+        if (!empty($desc)) {
+            $html .= '<div class="cosas-amazon-description">' . esc_html($desc) . '</div>';
+        }
+
+        // 9. Botón Ver en Amazon
         if ($attributes['showButton'] && !empty($amazon_url)) {
             $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="nofollow" class="cosas-amazon-btn" style="background-color: ' . esc_attr($attributes['buttonColor']) . ';">';
             $html .= esc_html($attributes['buttonText']);
             $html .= '</a>';
         }
         
-        $html .= '</div>'; // Cerrar contenido
-        $html .= '</div>'; // Cerrar item
+    $html .= '</div>'; // Cerrar contenido
+    $html .= '</div>'; // Cerrar item
         
         return $html;
     }
@@ -1102,6 +1195,10 @@ class CosasDeAmazon {
         if (is_string($product_data)) {
             $decoded = json_decode($product_data, true);
             if (json_last_error() === JSON_ERROR_NONE) {
+                // Sanitizar precios si existen
+                if (is_array($decoded)) {
+                    $decoded = $this->sanitize_price_fields($decoded);
+                }
                 return $decoded;
             }
             return null;
@@ -1109,15 +1206,194 @@ class CosasDeAmazon {
         
         // Si es un objeto, convertir a array
         if (is_object($product_data)) {
-            return (array) $product_data;
+            $arr = (array) $product_data;
+            return $this->sanitize_price_fields($arr);
         }
         
         // Si ya es array, devolverlo tal como está
         if (is_array($product_data)) {
-            return $product_data;
+            return $this->sanitize_price_fields($product_data);
         }
         
         return null;
+    }
+
+    /**
+     * Reemplaza espacios especiales y entidades en campos de precio para evitar caracteres "?".
+     */
+    private function sanitize_price_fields($data) {
+        if (!is_array($data)) return $data;
+        foreach (array('price', 'originalPrice', 'original_price') as $key) {
+            if (isset($data[$key]) && is_string($data[$key])) {
+                $data[$key] = $this->normalize_price_string($data[$key]);
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * Normaliza una cadena de precio: decodifica entidades, sustituye NBSP/espacios finos por espacio normal y colapsa espacios.
+     */
+    private function normalize_price_string($s) {
+        if (!is_string($s)) return $s;
+        // Decodificar entidades HTML comunes (&euro;, &nbsp;, etc.)
+        $s = wp_specialchars_decode($s, ENT_QUOTES);
+        // Eliminar marcas e invisibles (zero-width, joiners, BOM, LRM/RLM, FEFF)
+        $invisibles = array(
+            "\xE2\x80\x8B", /* ZWSP */
+            "\xE2\x80\x8C", /* ZWNJ */
+            "\xE2\x80\x8D", /* ZWJ */
+            "\xEF\xBB\xBF", /* BOM */
+            "\xE2\x81\xA0", /* WJ */
+            "\xE2\x80\x8E", /* LRM */
+            "\xE2\x80\x8F", /* RLM */
+            "\xEF\xBB\xBF",  /* FEFF BOM duplicate for safety */
+            "\xC2\xAD" /* SOFT HYPHEN */
+        );
+        $s = str_replace($invisibles, '', $s);
+        // Eliminar Replacement Character U+FFFD si llegara a colarse
+        $s = str_replace("\xEF\xBF\xBD", '', $s);
+        // Reemplazar variedad amplia de espacios Unicode por espacio normal
+        $specialSpaces = array(
+            "\xC2\xA0", /* NBSP */
+            "\xE2\x80\xAF", /* NARROW NBSP */
+            "\xE2\x80\x87", /* FIGURE SPACE */
+            "\xE2\x80\x88", /* PUNCTUATION SPACE */
+            "\xE2\x80\x89", /* THIN SPACE */
+            "\xE2\x80\x8A", /* HAIR SPACE */
+            "\xE2\x80\x82", /* EN SPACE */
+            "\xE2\x80\x83", /* EM SPACE */
+            "\xE2\x80\x84", /* THREE-PER-EM */
+            "\xE2\x80\x85", /* FOUR-PER-EM */
+            "\xE2\x80\x86"  /* SIX-PER-EM */
+        );
+        $s = str_replace($specialSpaces, ' ', $s);
+        // Colapsar espacios múltiples y recortar
+        $s = preg_replace('/\s+/u', ' ', $s);
+        $s = trim($s);
+        // Reglas específicas por moneda
+        // EUR como sufijo: "123€" o "123  €" => "123 €"
+        $s = preg_replace('/(\d)\s*€/u', '$1 €', $s);
+        // EUR como prefijo: "€ 123" => "€123" (sin espacios tras símbolo)
+        $s = preg_replace('/^€\s+/u', '€', $s);
+        // USD/GBP/JPY como prefijo: eliminar espacios tras el símbolo al inicio
+        $s = preg_replace('/^([$£¥])\s+(\d)/u', '$1$2', $s);
+        return $s;
+    }
+
+    /**
+     * Convierte una cadena de precio (con símbolos y separadores locales) a float.
+     */
+    private function parse_price_to_float($s) {
+        if (!is_string($s) && !is_numeric($s)) return null;
+        $s = (string) $s;
+        $s = $this->normalize_price_string($s);
+        // Quitar todo menos dígitos y separadores
+        $clean = preg_replace('/[^0-9.,]/u', '', $s);
+        if ($clean === '' || $clean === null) return null;
+        $lastComma = strrpos($clean, ',');
+        $lastDot = strrpos($clean, '.');
+        // Determinar separador decimal como el último separador presente
+        $decimalSep = null;
+        if ($lastComma !== false && $lastDot !== false) {
+            $decimalSep = $lastComma > $lastDot ? ',' : '.';
+        } elseif ($lastComma !== false) {
+            // Si solo hay coma y hay dos dígitos tras ella, asumir decimal
+            $decimalSep = (preg_match('/,\d{1,2}$/', $clean)) ? ',' : null;
+        } elseif ($lastDot !== false) {
+            // Si solo hay punto y hay dos dígitos tras él, asumir decimal
+            $decimalSep = (preg_match('/\.\d{1,2}$/', $clean)) ? '.' : null;
+        }
+        // Eliminar miles y normalizar decimal a punto
+        if ($decimalSep === ',') {
+            $clean = str_replace('.', '', $clean); // puntos eran miles
+            $clean = str_replace(',', '.', $clean); // coma a punto
+        } elseif ($decimalSep === '.') {
+            $clean = str_replace(',', '', $clean); // comas eran miles
+        } else {
+            // Sin separador decimal fiable: eliminar todos separadores
+            $clean = str_replace([',', '.'], '', $clean);
+        }
+        if ($clean === '' || $clean === null) return null;
+        return floatval($clean);
+    }
+
+    /**
+     * Calcula descuento en % a partir de precio actual y original. Devuelve int 0-99 o null.
+     */
+    private function compute_discount_percent_from_prices($priceStr, $originalStr) {
+        $p = $this->parse_price_to_float($priceStr);
+        $o = $this->parse_price_to_float($originalStr);
+        if ($p === null || $o === null || $o <= 0 || $p <= 0 || $p >= $o) return null;
+        $pct = round((1 - ($p / $o)) * 100);
+        if ($pct < 0) $pct = 0; if ($pct > 99) $pct = 99;
+        return (int) $pct;
+    }
+
+    /**
+     * Determina color de texto accesible (negro/blanco) en función de un color de fondo.
+     */
+    private function get_contrasting_text_color($bg) {
+        $hex = $this->normalize_color_to_hex($bg);
+        if (!$hex) return '#ffffff';
+        $r = hexdec(substr($hex, 1, 2));
+        $g = hexdec(substr($hex, 3, 2));
+        $b = hexdec(substr($hex, 5, 2));
+        // Luma relativa sRGB
+        $luma = (0.2126 * ($r/255)) + (0.7152 * ($g/255)) + (0.0722 * ($b/255));
+        return $luma > 0.5 ? '#000000' : '#ffffff';
+    }
+
+    /** Normaliza un color tipo #RGB/#RRGGBB a #RRGGBB si es posible */
+    private function normalize_color_to_hex($c) {
+        if (!is_string($c)) return null;
+        $c = trim($c);
+        if (preg_match('/^#([0-9a-fA-F]{3})$/', $c, $m)) {
+            $r = $m[1][0]; $g = $m[1][1]; $b = $m[1][2];
+            return '#' . $r.$r . $g.$g . $b.$b;
+        }
+        if (preg_match('/^#([0-9a-fA-F]{6})$/', $c)) {
+            return $c;
+        }
+        return null;
+    }
+
+    /**
+     * Calcula estilos de botón auto en estilo featured según fondo elegido (gradient/color/default).
+     * Devuelve array ['background' => ..., 'color' => ..., 'border' => ...]
+     */
+    private function compute_featured_button_styles($attrs) {
+        $default = array(
+            'background' => 'rgba(255,255,255,0.2)',
+            'color' => '#ffffff',
+            'border' => '2px solid #ffffff'
+        );
+        $bg = '';
+        if (!empty($attrs['featuredBackgroundGradient'])) {
+            $bg = $attrs['featuredBackgroundGradient'];
+        } elseif (!empty($attrs['featuredBackgroundColor'])) {
+            $bg = $attrs['featuredBackgroundColor'];
+        } elseif (!empty($attrs['backgroundColor'])) {
+            $bg = $attrs['backgroundColor'];
+        }
+        // Si es gradiente, mantener botón traslúcido con borde blanco (buena legibilidad).
+        if (is_string($bg) && stripos($bg, 'gradient') !== false) {
+            return $default;
+        }
+        // Si es color sólido, ajustamos texto según contraste y usamos mismo color de fondo en sólido para el botón un poco más oscuro/claro
+        $hex = $this->normalize_color_to_hex($bg);
+        if ($hex) {
+            $text = $this->get_contrasting_text_color($hex);
+            // Bordes con opacidad para asegurar separación
+            $border = $text === '#ffffff' ? '2px solid rgba(255,255,255,0.8)' : '2px solid rgba(0,0,0,0.6)';
+            // Fondo: usar el color sólido, pero si el texto es oscuro, subimos la luminosidad del fondo para mantener contraste sobre el card
+            return array(
+                'background' => $hex,
+                'color' => $text,
+                'border' => $border
+            );
+        }
+        return $default;
     }
     
     /**
@@ -1219,7 +1495,7 @@ class CosasDeAmazon {
         if ($attributes['showPrice']) {
             $html .= '<td class="cosas-amazon-table-price">';
             if (!empty($product_data['price'])) {
-                $html .= '<span class="cosas-amazon-price">' . esc_html($product_data['price']) . '</span>';
+                $html .= '<span class="cosas-amazon-price" style="color:' . esc_attr($attributes['priceColor']) . ';">' . esc_html($product_data['price']) . '</span>';
             } else {
                 $html .= '<span class="cosas-amazon-no-price">N/A</span>';
             }
@@ -1229,10 +1505,24 @@ class CosasDeAmazon {
         // Descuento
         if ($attributes['showDiscount']) {
             $html .= '<td class="cosas-amazon-table-discount">';
-            if (!empty($product_data['discount']) && $product_data['discount'] > 0) {
-                $html .= '<span class="cosas-amazon-discount">-' . esc_html($product_data['discount']) . '%</span>';
+            // Determinar descuento efectivo: usar valor válido o calcular a partir de precios
+            $discount_val = null;
+            if (isset($product_data['discount'])) {
+                $raw = (string) $product_data['discount'];
+                $num = preg_replace('/[^0-9]/', '', $raw);
+                if ($num !== '') {
+                    $discount_val = intval($num);
+                    if ($discount_val <= 0 || $discount_val >= 100) $discount_val = null;
+                }
+            }
+            if ($discount_val === null) {
+                $orig = $product_data['original_price'] ?? ($product_data['originalPrice'] ?? null);
+                $discount_val = $this->compute_discount_percent_from_prices($product_data['price'] ?? null, $orig);
+            }
+            if ($discount_val !== null && $discount_val > 0) {
+                $html .= '<span class="cosas-amazon-discount" style="background-color:' . esc_attr($attributes['discountColor']) . ';">-' . esc_html($discount_val) . '%</span>';
                 if (!empty($product_data['original_price'])) {
-                    $html .= '<span class="cosas-amazon-original-price">' . esc_html($product_data['original_price']) . '</span>';
+                    $html .= '<span class="cosas-amazon-original-price" style="color:' . esc_attr($attributes['originalPriceColor']) . ';">' . esc_html($product_data['original_price']) . '</span>';
                 }
             } else {
                 $html .= '<span class="cosas-amazon-no-discount">Sin descuento</span>';
@@ -1243,7 +1533,7 @@ class CosasDeAmazon {
         // Botón
         if ($attributes['showButton']) {
             $html .= '<td class="cosas-amazon-table-button">';
-            $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="noopener noreferrer" class="cosas-amazon-btn">';
+            $html .= '<a href="' . esc_url($amazon_url) . '" target="_blank" rel="noopener noreferrer" class="cosas-amazon-btn" style="background-color:' . esc_attr($attributes['buttonColor']) . ';">';
             $html .= esc_html($attributes['buttonText'] ?? 'Ver en Amazon');
             $html .= '</a>';
             $html .= '</td>';
@@ -1350,9 +1640,22 @@ class CosasDeAmazon {
             'show_description' => true
         ), $atts, 'amazon_producto');
         
+        // Preparar URLs: permitir lista separada por comas para múltiples productos
+        $urls = array();
+        if (!empty($attributes['url'])) {
+            $urls = array_map('trim', explode(',', $attributes['url']));
+        }
+
+        $amazonUrl = isset($urls[0]) ? $urls[0] : '';
+        $amazonUrls = array();
+        if (count($urls) > 1) {
+            $amazonUrls = array_slice($urls, 1);
+        }
+
         // Convertir a formato del bloque
         $block_attributes = array(
-            'amazonUrl' => $attributes['url'],
+            'amazonUrl' => $amazonUrl,
+            'amazonUrls' => $amazonUrls,
             'displayStyle' => $attributes['style'],
             'blockSize' => $attributes['size'],
             'showButton' => filter_var($attributes['show_button'], FILTER_VALIDATE_BOOLEAN),
@@ -1361,6 +1664,11 @@ class CosasDeAmazon {
             'showDiscount' => filter_var($attributes['show_discount'], FILTER_VALIDATE_BOOLEAN),
             'showDescription' => filter_var($attributes['show_description'], FILTER_VALIDATE_BOOLEAN)
         );
+
+        // Activar modo de múltiples productos si se pasaron varias URLs o estilo tipo carousel/tabla
+        if (!empty($amazonUrls) || in_array($block_attributes['displayStyle'], array('carousel', 'table'))) {
+            $block_attributes['multipleProductsMode'] = true;
+        }
         
         // Usar la misma función de renderizado que el bloque
         return $this->render_amazon_product_block($block_attributes);

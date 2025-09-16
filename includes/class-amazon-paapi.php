@@ -387,6 +387,7 @@ class CosasAmazonPAAPI {
                     'Images.Primary.Large',
                     'ItemInfo.Title',
                     'Offers.Listings.Price',
+                    'Offers.Listings.Price.Savings',
                     'Offers.Listings.SavingBasis',
                     'ItemInfo.Features',
                     'CustomerReviews.StarRating',
@@ -471,21 +472,63 @@ class CosasAmazonPAAPI {
             $data['price'] = $item['Offers']['Listings'][0]['Price']['DisplayAmount'];
         }
         
-        // Precio original (antes del descuento)
-        if (isset($item['Offers']['Listings'][0]['SavingBasis']['DisplayAmount'])) {
+        // Precio original (antes del descuento) y ahorro oficial
+        $hasSavingBasis = isset($item['Offers']['Listings'][0]['SavingBasis']['DisplayAmount']);
+        $hasSavingsField = isset($item['Offers']['Listings'][0]['Price']['Savings']['DisplayAmount'])
+            || isset($item['Offers']['Listings'][0]['Price']['Savings']['Percentage']);
+
+        if ($hasSavingBasis) {
             $data['originalPrice'] = $item['Offers']['Listings'][0]['SavingBasis']['DisplayAmount'];
-            
-            // Calcular descuento
-            if ($data['price'] && $data['originalPrice']) {
-                $current = floatval(preg_replace('/[^0-9.,]/', '', str_replace(',', '.', $data['price'])));
-                $original = floatval(preg_replace('/[^0-9.,]/', '', str_replace(',', '.', $data['originalPrice'])));
-                
-                if ($original > $current) {
-                    $discount_amount = $original - $current;
-                    $discount_percent = round(($discount_amount / $original) * 100);
-                    $data['discount'] = $discount_percent; // Solo el número, sin %
-                }
+        }
+
+        // Heurística: identificar posibles precios por unidad para evitar falsos descuentos
+        $title = isset($data['title']) ? strtolower($data['title']) : '';
+        $looksLikeUnitPrice = false;
+        if ($title) {
+            // Unidades comunes: ml, l, litro(s), kg, g, unidad, pack, x, por 100/1l/1kg
+            $unit_patterns = array(
+                '/\b\d+\s?(ml|l|litro|litros|kg|g)\b/i',
+                '/\bpor\s?(100|1l|1 kg|kg|l)\b/i',
+                '/\bpack\b/i',
+                '/\b\d+\s?x\b/i',
+                '/\b\d+\s?(unidades|unidad|capsulas|cápsulas|tabletas)\b/i',
+                '/\b\d+\s?(ml|g)\s?(cada|c/u)\b/i'
+            );
+            foreach ($unit_patterns as $p) {
+                if (preg_match($p, $title)) { $looksLikeUnitPrice = true; break; }
             }
+        }
+
+        // Parsear números para comparar ratio sospechoso (p.ej., original refleja €/L y price es por 250ml)
+        $current = null; $original = null;
+        if ($data['price']) {
+            $current = floatval(preg_replace('/[^0-9.,]/', '', str_replace(',', '.', $data['price'])));
+        }
+        if (!empty($data['originalPrice'])) {
+            $original = floatval(preg_replace('/[^0-9.,]/', '', str_replace(',', '.', $data['originalPrice'])));
+        }
+
+        $suspiciousUnitRatio = false;
+        if ($current && $original && $original > $current) {
+            $ratio = $original / $current; // Si ~4x, puede ser 1L vs 250ml
+            if ($ratio >= 3.5 && $ratio <= 4.5) {
+                $suspiciousUnitRatio = true;
+            }
+            // Ratios altos por unidad
+            if ($ratio >= 8) {
+                $suspiciousUnitRatio = true;
+            }
+        }
+
+        // Si parece precio por unidad, no establecer descuento ni originalPrice
+        if (($looksLikeUnitPrice || $suspiciousUnitRatio) && !$hasSavingsField) {
+            $data['originalPrice'] = '';
+            $data['discount'] = '';
+        } elseif ($current && $original && $original > $current) {
+            // Calcular descuento si aplica y no fue descartado
+            $discount_amount = $original - $current;
+            $discount_percent = round(($discount_amount / $original) * 100);
+            $data['discount'] = $discount_percent; // Solo el número, sin %
         }
         
         // Descripción (características)

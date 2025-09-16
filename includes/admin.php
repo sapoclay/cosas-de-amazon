@@ -214,15 +214,9 @@ class CosasAmazonAdmin {
         $css .= "    color: {$primary_color} !important;\n";
         $css .= "}\n\n";
         
-        $css .= ".cosas-amazon-product .cosas-amazon-button {\n";
-        $css .= "    background-color: {$primary_color} !important;\n";
-        $css .= "    border-color: {$primary_color} !important;\n";
-        $css .= "}\n\n";
-        
-        $css .= ".cosas-amazon-product .cosas-amazon-button:hover {\n";
-        $css .= "    background-color: {$accent_color} !important;\n";
-        $css .= "    border-color: {$accent_color} !important;\n";
-        $css .= "}\n\n";
+    // Nota: No aplicar background/border al contenedor .cosas-amazon-button
+    // para evitar una barra de color a lo ancho. El color del botón
+    // se gestiona en .cosas-amazon-btn desde los estilos base.
         
         $css .= ".cosas-amazon-product .cosas-amazon-discount {\n";
         $css .= "    color: {$accent_color} !important;\n";
@@ -691,9 +685,25 @@ class CosasAmazonAdmin {
                 // Botón para estadísticas de cache
                 $(document).on("click", "#get-cache-stats-btn", function() {
                     var btn = $(this);
-                    var resultsDiv = $("#cache-results");
-                    
-                    makeAjaxRequest("get_cache_stats", btn, resultsDiv);
+                    // Buscar un contenedor de resultados apropiado cercano
+                    var container = btn.closest("#cosas-amazon-cache-container, .cosas-amazon-config-page, .wrap, body");
+                    var resultsDiv = container.find("#cache-results");
+                    if (!resultsDiv.length) {
+                        resultsDiv = container.find("#cache-action-results");
+                    }
+                    if (!resultsDiv.length) {
+                        // Fallback global por si acaso
+                        resultsDiv = $("#cache-results, #cache-action-results").first();
+                    }
+                    if (!resultsDiv.length) {
+                        // Último recurso: crear un contenedor bajo el botón
+                        resultsDiv = $("<div id=\"cache-results\" style=\"margin-top:10px;\"></div>");
+                        btn.after(resultsDiv);
+                    }
+                    // Usar callback para colocar directamente el HTML devuelto
+                    makeAjaxRequest("get_cache_stats", btn, resultsDiv, function(response){
+                        resultsDiv.html(response.data);
+                    });
                 });
                 
                 // Botón para forzar actualización
@@ -853,6 +863,13 @@ class CosasAmazonAdmin {
     }
     
     public function add_admin_menu() {
+        static $menus_already_registered = false;
+        if ($menus_already_registered) {
+            error_log('[COSAS_AMAZON_DEBUG] ⏭️ add_admin_menu ignorada (ya registrado en esta petición)');
+            return;
+        }
+        $menus_already_registered = true;
+
         error_log('[COSAS_AMAZON_DEBUG] add_admin_menu llamada');
         error_log('[COSAS_AMAZON_DEBUG] current_user_can(manage_options): ' . (current_user_can('manage_options') ? 'true' : 'false'));
         error_log('[COSAS_AMAZON_DEBUG] is_admin(): ' . (is_admin() ? 'true' : 'false'));
@@ -879,7 +896,7 @@ class CosasAmazonAdmin {
         } else {
             error_log('[COSAS_AMAZON_DEBUG] ❌ Error registrando menú principal');
         }
-        
+
         error_log('[COSAS_AMAZON_DEBUG] Menú principal registrado correctamente');
     }
     
@@ -1182,41 +1199,17 @@ class CosasAmazonAdmin {
             'cosas_amazon_validation'
         );
 
+        // Sección simplificada de utilidades (sin enlaces externos de diagnóstico)
         add_settings_section(
             'cosas_amazon_tools',
-            'Herramientas y Diagnósticos',
+            'Herramientas',
             array($this, 'tools_section_callback'),
             'cosas_amazon_settings'
         );
-        
-        add_settings_field(
-            'run_tests',
-            'Ejecutar Tests',
-            array($this, 'run_tests_callback'),
-            'cosas_amazon_settings',
-            'cosas_amazon_tools'
-        );
-        
-        add_settings_field(
-            'test_url',
-            'Probar URL de Amazon',
-            array($this, 'test_url_callback'),
-            'cosas_amazon_settings',
-            'cosas_amazon_tools'
-        );
-        
         add_settings_field(
             'clear_cache',
             'Limpiar Cache',
             array($this, 'clear_cache_callback'),
-            'cosas_amazon_settings',
-            'cosas_amazon_tools'
-        );
-        
-        add_settings_field(
-            'test_rest_endpoint',
-            'Test Endpoint REST',
-            array($this, 'test_rest_endpoint_callback'),
             'cosas_amazon_settings',
             'cosas_amazon_tools'
         );
@@ -1315,15 +1308,7 @@ class CosasAmazonAdmin {
     }
 
     public function tools_section_callback() {
-        echo '<p>Herramientas para diagnosticar y probar el funcionamiento del plugin. Estas herramientas te ayudarán a verificar que todo funciona correctamente y a solucionar problemas.</p>';
-        echo '<div style="background: #f0f8ff; border-left: 4px solid #0073aa; padding: 15px; margin: 15px 0;">';
-        echo '<h4>💡 Consejos de uso:</h4>';
-        echo '<ul>';
-        echo '<li><strong>Probar URL:</strong> Introduce cualquier URL de Amazon para verificar si el plugin puede extraer los datos correctamente.</li>';
-        echo '<li><strong>Limpiar Cache:</strong> Si los productos no se actualizan, limpia el cache para forzar una nueva obtención de datos.</li>';
-        echo '<li><strong>Estadísticas:</strong> Revisa cuántos productos tienes almacenados en cache y cuándo fueron actualizados por última vez.</li>';
-        echo '</ul>';
-        echo '</div>';
+        echo '<p>Utilidades básicas del plugin. Desde aquí puedes limpiar la caché si notas datos desactualizados.</p>';
     }
 
     // Funciones callback para la sección de cache
@@ -1512,23 +1497,9 @@ class CosasAmazonAdmin {
         echo '</div>';
     }
     
-    public function run_tests_callback() {
-        echo '<div id="cosas-amazon-tests-container">';
-        echo '<button type="button" id="run-tests-btn" class="button button-secondary">Ejecutar Tests</button>';
-        echo '<button type="button" id="debug-ajax-btn" class="button button-secondary" style="margin-left: 10px;">Debug AJAX</button>';
-        echo '<div id="tests-results" style="margin-top: 15px;"></div>';
-        echo '</div>';
-    }
+    // Eliminado: interfaz de ejecución de tests y depuración
     
-    public function test_url_callback() {
-        echo '<div id="cosas-amazon-url-test-container">';
-        echo '<div style="margin-bottom: 15px;">';
-        echo '<input type="url" id="test-amazon-url" placeholder="https://www.amazon.es/dp/..." style="width: 400px; margin-right: 10px;" />';
-        echo '<button type="button" id="test-url-btn" class="button button-secondary">Probar URL</button>';
-        echo '</div>';
-        echo '<div id="url-test-results" style="margin-top: 15px;"></div>';
-        echo '</div>';
-    }
+    // Eliminado: probador de URL integrado (no se publicará)
     
     public function clear_cache_callback() {
         echo '<div id="cosas-amazon-cache-container">';
@@ -1942,58 +1913,15 @@ class CosasAmazonAdmin {
                         </div>
                     </div>
                     
-                    <!-- Panel de herramientas de diagnóstico -->
+                    <!-- Panel de mantenimiento -->
                     <div style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                        <h4 style="margin: 0 0 15px 0; color: #0073aa; font-size: 16px;">🔧 Herramientas de Diagnóstico</h4>
-                        <p style="margin: 0 0 15px 0; font-size: 13px; color: #666;">Si experimentas problemas con el plugin, puedes utilizar estas herramientas para diagnosticar y resolver los errores.</p>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-                            <?php
-                            // Generar token de seguridad temporal
-                            $security_token = wp_create_nonce('cosas_amazon_diagnostic_' . date('Y-m-d-H'));
-                            $base_url = plugins_url('', dirname(__FILE__));
-                            ?>
-                            
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 4px;">
-                                <div>
-                                    <strong style="color: #0073aa;">🔍 Verificación de Enlaces</strong>
-                                    <div style="font-size: 12px; color: #666;">Verifica el estado de los enlaces del menú de administración</div>
-                                </div>
-                                <a href="<?php echo esc_url($base_url . '/verificacion-enlaces.php?token=' . $security_token); ?>" 
-                                   target="_blank" 
-                                   class="button button-secondary"
-                                   style="text-decoration: none;">Verificar</a>
-                            </div>
-                            
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 4px;">
-                                <div>
-                                    <strong style="color: #0073aa;">🏥 Diagnóstico de Producción</strong>
-                                    <div style="font-size: 12px; color: #666;">Ejecuta un diagnóstico completo del plugin en producción</div>
-                                </div>
-                                <a href="<?php echo esc_url($base_url . '/diagnostico-produccion.php?token=' . $security_token); ?>" 
-                                   target="_blank" 
-                                   class="button button-secondary"
-                                   style="text-decoration: none;">Diagnosticar</a>
-                            </div>
-                            
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 4px;">
-                                <div>
-                                    <strong style="color: #0073aa;">📋 Verificador de Menús</strong>
-                                    <div style="font-size: 12px; color: #666;">Verifica la estructura y configuración de los menús</div>
-                                </div>
-                                <a href="<?php echo esc_url($base_url . '/verificador-menus.php?token=' . $security_token); ?>" 
-                                   target="_blank" 
-                                   class="button button-secondary"
-                                   style="text-decoration: none;">Verificar Menús</a>
-                            </div>
+                        <h4 style="margin: 0 0 15px 0; color: #0073aa; font-size: 16px;">🧰 Mantenimiento</h4>
+                        <p style="margin: 0 0 15px 0; font-size: 13px; color: #666;">Acciones rápidas de mantenimiento del plugin.</p>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="button" id="clear-cache-btn" class="button button-secondary">🗑️ Limpiar Cache</button>
+                            <button type="button" id="get-cache-stats-btn" class="button button-secondary">📊 Ver Estadísticas</button>
                         </div>
-                        
-                        <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
-                            <p style="margin: 0; font-size: 12px; color: #856404;">
-                                <strong>⚠️ Importante:</strong> Estas herramientas están destinadas para uso administrativo y diagnóstico. 
-                                Los enlaces incluyen tokens de seguridad temporales que expiran cada hora.
-                            </p>
-                        </div>
+                        <div id="cache-action-results" style="margin-top: 15px;"></div>
                     </div>
                 </div>
             </div>
@@ -2063,26 +1991,22 @@ class CosasAmazonAdmin {
     }
     
     public function check_menu_exists() {
-        global $submenu;
-        
+        global $menu;
         if (is_admin() && current_user_can('manage_options')) {
-            // Verificar si el menú existe en opciones
-            $menu_exists = false;
-            if (isset($submenu['options-general.php'])) {
-                foreach ($submenu['options-general.php'] as $item) {
-                    if (isset($item[2]) && $item[2] === 'cosas-amazon-settings') {
-                        $menu_exists = true;
+            $main_exists = false;
+            if (is_array($menu)) {
+                foreach ($menu as $item) {
+                    if (is_array($item) && isset($item[2]) && $item[2] === 'cosas-amazon-main') {
+                        $main_exists = true;
                         break;
                     }
                 }
             }
-            
-            if (!$menu_exists) {
-                error_log('[COSAS_AMAZON_DEBUG] ⚠️  Menú no encontrado, intentando re-registrar');
-                // Intentar registrar el menú de nuevo
+            if (!$main_exists) {
+                error_log('[COSAS_AMAZON_DEBUG] ⚠️ Menú principal no encontrado, intentando re-registrar');
                 $this->add_admin_menu();
             } else {
-                error_log('[COSAS_AMAZON_DEBUG] ✅ Menú encontrado correctamente');
+                error_log('[COSAS_AMAZON_DEBUG] ✅ Menú principal encontrado');
             }
         }
     }
@@ -2202,89 +2126,7 @@ class CosasAmazonAdmin {
     }
     
     // Función de test específica para el endpoint REST
-    public function test_rest_endpoint_callback() {
-        echo '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0;">';
-        echo '<h4>🔍 Test del Endpoint REST</h4>';
-        echo '<button type="button" id="test-rest-endpoint-btn" class="button button-primary">Probar Endpoint REST</button>';
-        echo '<div style="margin-top: 10px;">';
-        echo '<input type="url" id="test-rest-url" placeholder="https://amzn.to/3GDSIAm" value="https://amzn.to/3GDSIAm" style="width: 300px; margin-right: 10px;" />';
-        echo '<button type="button" id="test-rest-product-btn" class="button button-secondary">Probar con Producto</button>';
-        echo '</div>';
-        echo '<div id="rest-test-results" style="margin-top: 15px; background: white; padding: 10px; border-radius: 4px; min-height: 50px;"></div>';
-        echo '</div>';
-        echo '<p class="description">Prueba directa del endpoint REST para verificar que funciona correctamente.</p>';
-        
-        // Añadir JavaScript específico para este test
-        echo '<script>
-        jQuery(document).ready(function($) {
-            $("#test-rest-endpoint-btn").click(function() {
-                var btn = $(this);
-                var resultsDiv = $("#rest-test-results");
-                
-                btn.prop("disabled", true).text("Probando...");
-                resultsDiv.html("<p>Probando endpoint básico...</p>");
-                
-                // Probar endpoint básico
-                $.get(cosas_amazon_admin.site_url + "/wp-json/cda/v1/test")
-                .done(function(data) {
-                    var html = "<div style=\\"color: green;\\"><strong>✅ Endpoint básico funciona</strong></div>";
-                    html += "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
-                    resultsDiv.html(html);
-                })
-                .fail(function(xhr, status, error) {
-                    resultsDiv.html("<div style=\\"color: red;\\"><strong>❌ Error en endpoint básico:</strong><br>" + error + "<br>Status: " + xhr.status + "</div>");
-                })
-                .always(function() {
-                    btn.prop("disabled", false).text("Probar Endpoint REST");
-                });
-            });
-            
-            $("#test-rest-product-btn").click(function() {
-                var btn = $(this);
-                var url = $("#test-rest-url").val();
-                var resultsDiv = $("#rest-test-results");
-                
-                if (!url) {
-                    resultsDiv.html("<div style=\\"color: orange;\\">⚠️ Por favor introduce una URL</div>");
-                    return;
-                }
-                
-                btn.prop("disabled", true).text("Probando...");
-                resultsDiv.html("<p>Probando endpoint de productos...</p>");
-                
-                // Usar fetch API como en el bloque
-                fetch(cosas_amazon_admin.site_url + "/wp-json/cda/v1/fetch-product-data", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-WP-Nonce": cosas_amazon_admin.nonce
-                    },
-                    body: JSON.stringify({ url: url })
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.text().then(text => {
-                            throw new Error("HTTP " + response.status + ": " + text);
-                        });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    var html = "<div style=\\"color: green;\\"><strong>✅ Endpoint de productos funciona</strong></div>";
-                    html += "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
-                    resultsDiv.html(html);
-                })
-                .catch(error => {
-                    console.error("Error completo:", error);
-                    resultsDiv.html("<div style=\\"color: red;\\"><strong>❌ Error:</strong><br>" + error.message + "</div>");
-                })
-                .finally(() => {
-                    btn.prop("disabled", false).text("Probar con Producto");
-                });
-            });
-        });
-        </script>';
-    }
+    // Eliminado: test de endpoints REST en UI de administración
     
     // Manejador AJAX para obtener estadísticas de cache
     public function ajax_get_cache_stats() {

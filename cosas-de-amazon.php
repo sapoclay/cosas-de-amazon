@@ -3,7 +3,7 @@
  * Plugin Name: Cosas de Amazon
  * Plugin URI: https://entreunosyceros.com
  * Description: Plugin para mostrar productos de Amazon usando enlaces cortos con diferentes estilos de tarjetas. Versión mejorada con limitaciones progresivas completas, sincronización editor-frontend, soporte integral para múltiples productos y CSS personalizado.
- * Version: 2.11.0
+ * Version: 2.12.0
  * Author: entreunosyceros
  * License: GPL v2 or later
  * Text Domain: cosas-de-amazon
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Definir constantes del plugin
-define('COSAS_AMAZON_VERSION', '2.11.0');
+define('COSAS_AMAZON_VERSION', '2.12.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -28,6 +28,11 @@ if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/class-amazon-paapi.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/class-amazon-paapi.php';
 }
 
+// Cargar sistema de estadísticas en todos los contextos (frontend y admin)
+if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/stats.php')) {
+    require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/stats.php';
+}
+
 // Cargar clase admin siempre (necesaria para verificaciones)
 if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php';
@@ -38,7 +43,6 @@ if (is_admin()) {
     $additional_admin_files = [
         'includes/install.php',
         'includes/security.php',
-        'includes/stats.php',
         'includes/comparator.php',
         'includes/customizer.php',
         'includes/custom-css.php',
@@ -128,38 +132,15 @@ add_action('init', function() {
     }
 }, 999); // Prioridad alta para ejecutar después de otros plugins
 
-// Inicializar clases si existen (solo una vez)
-// Hook temprano para inicializar admin
-add_action('init', function() {
-    if (class_exists('CosasAmazonAdmin')) {
-        // Verificar si ya se ha inicializado para evitar duplicados
-        if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
-            $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
-            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en init');
-        }
-    }
-}, 1); // Prioridad muy temprana
-
-// Usar hook admin_init para asegurar que WordPress esté completamente cargado
-add_action('admin_init', function() {
-    if (is_admin() && class_exists('CosasAmazonAdmin')) {
-        // Verificar si ya se ha inicializado para evitar duplicados
-        if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
-            $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
-            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en admin_init');
-        }
-    }
-});
-
-// También inicializar en admin_menu como fallback
-add_action('admin_menu', function() {
+// Inicialización única del admin para evitar duplicados de menú
+add_action('plugins_loaded', function() {
     if (is_admin() && class_exists('CosasAmazonAdmin')) {
         if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
             $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
-            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en admin_menu (fallback)');
+            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en plugins_loaded');
         }
     }
-}, 5); // Prioridad temprana
+}, 1);
 
 if (class_exists('CosasAmazonCustomizer')) {
     new CosasAmazonCustomizer();

@@ -10,21 +10,25 @@ window.cosasAmazonCarousel = {
         const carousel = button.closest('.cosas-amazon-products-carousel');
         const container = carousel.querySelector('.cosas-amazon-carousel-container');
         const items = container.querySelectorAll('.cosas-amazon-carousel-item');
-        
-        if (items.length === 0) return;
-        
-        const itemWidth = items[0].offsetWidth + 20; // incluir gap
-        const containerWidth = carousel.offsetWidth;
-        const maxScroll = (items.length * itemWidth) - containerWidth;
-        
-        let currentTransform = this.getCurrentTransform(container);
-        let newTransform = currentTransform - itemWidth;
-        
-        // Si llegamos al final, volver al inicio
-        if (Math.abs(newTransform) >= maxScroll) {
+        if (!carousel || !container || items.length === 0) return;
+
+    const styles = window.getComputedStyle(container);
+        const gap = parseFloat(styles.gap || styles.columnGap || 20) || 20;
+        const itemW = items[0].getBoundingClientRect().width;
+        const step = itemW + gap;
+    const viewport = carousel.clientWidth; // ancho visible del wrapper
+    const totalItemsWidth = (items.length * itemW) + ((items.length - 1) * gap);
+    const maxScroll = Math.max(0, totalItemsWidth - viewport);
+
+        const current = this.getCurrentTransform(container);
+        let newTransform;
+        // Si ya estamos al final (o muy cerca), la siguiente hace wrap al inicio
+        if (Math.abs(current) >= maxScroll) {
             newTransform = 0;
+        } else {
+            newTransform = Math.max(-maxScroll, current - step);
         }
-        
+
         container.style.transform = `translateX(${newTransform}px)`;
     },
     
@@ -33,21 +37,25 @@ window.cosasAmazonCarousel = {
         const carousel = button.closest('.cosas-amazon-products-carousel');
         const container = carousel.querySelector('.cosas-amazon-carousel-container');
         const items = container.querySelectorAll('.cosas-amazon-carousel-item');
-        
-        if (items.length === 0) return;
-        
-        const itemWidth = items[0].offsetWidth + 20; // incluir gap
-        const containerWidth = carousel.offsetWidth;
-        const maxScroll = (items.length * itemWidth) - containerWidth;
-        
-        let currentTransform = this.getCurrentTransform(container);
-        let newTransform = currentTransform + itemWidth;
-        
-        // Si llegamos al inicio, ir al final
-        if (newTransform > 0) {
+        if (!carousel || !container || items.length === 0) return;
+
+    const styles = window.getComputedStyle(container);
+        const gap = parseFloat(styles.gap || styles.columnGap || 20) || 20;
+        const itemW = items[0].getBoundingClientRect().width;
+        const step = itemW + gap;
+    const viewport = carousel.clientWidth;
+    const totalItemsWidth = (items.length * itemW) + ((items.length - 1) * gap);
+    const maxScroll = Math.max(0, totalItemsWidth - viewport);
+
+        const current = this.getCurrentTransform(container);
+        let newTransform;
+        // Si estamos al inicio (o por encima), la anterior hace wrap al final
+        if (current >= 0) {
             newTransform = -maxScroll;
+        } else {
+            newTransform = Math.min(0, current + step);
         }
-        
+
         container.style.transform = `translateX(${newTransform}px)`;
     },
     
@@ -118,11 +126,21 @@ window.cosasAmazonCarousel = {
             
             const transform = this.getCurrentTransform(container);
             const items = container.querySelectorAll('.cosas-amazon-carousel-item');
-            const itemWidth = items[0].offsetWidth + 20;
+            const styles = window.getComputedStyle(container);
+            const gap = parseFloat(styles.gap || styles.columnGap || 20) || 20;
+            const itemW = items[0].getBoundingClientRect().width;
+            const step = itemW + gap;
+            const viewport = carousel.clientWidth;
+            const totalItemsWidth = (items.length * itemW) + ((items.length - 1) * gap);
+            const maxScroll = Math.max(0, totalItemsWidth - viewport);
             
-            // Snap to nearest item
-            const nearestIndex = Math.round(Math.abs(transform) / itemWidth);
-            const newTransform = -nearestIndex * itemWidth;
+            // Snap al item más cercano dentro de límites
+            const nearestIndex = Math.round(Math.abs(transform) / step);
+            let newTransform = -nearestIndex * step;
+            if (Math.abs(newTransform) > maxScroll) newTransform = -maxScroll;
+            if (newTransform > 0) newTransform = 0;
+            // Evitar pequeños desbordes por redondeos cuando estamos al final
+            if (Math.abs(maxScroll + newTransform) < 1) newTransform = -maxScroll;
             
             container.style.transform = `translateX(${newTransform}px)`;
         };

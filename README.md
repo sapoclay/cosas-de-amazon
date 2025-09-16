@@ -4,19 +4,17 @@
 
 Plugin para mostrar productos de Amazon con extracción avanzada de datos, múltiples estilos de visualización y sistema de limitaciones progresivas. Optimizado para Amazon España con soporte completo para formato europeo de precios.
 
->!Nota Por el momento solo funciona correctamente la versíon de Scraping. La API de Amazon todavía no funciona.
-
-## 🆕 Versión 2.11.0 - Correcciones
+## 🆕 Versión 2.12.0 - Correcciones y Limpieza
 
 ### ✅ Problemas resueltos
-- **🎯 Menú duplicado**: Eliminada la duplicación del menú "Cosas de Amazon" en el panel de administración
-- **⚙️ Configuración de opciones**: Corregidos errores falsos en el solucionador automático
+- **💶 Precios en €**: Normalización robusta sin caracteres extraños (¿?) y formato consistente "12,34 €" en servidor y editor.
+- **🧱 Tarjeta horizontal**: La descripción ahora aparece debajo del bloque de precio/oferta, como se esperaba.
+- **🎠 Carrusel**: Navegación precisa por paso de item; muestra correctamente el 4º producto y añade soporte táctil con “snap”. Paridad total editor ↔ frontend.
 
 ### 🚀 Mejoras técnicas
-- Firma AWS4 con mapeo correcto de regiones (España → eu-west-1, Alemania → eu-central-1, etc.)
-- Sistema de fallbacks entre regiones optimizado
-- Validación correcta de update_option() considerando comportamiento WordPress
-- Logs mejorados con información detallada de regiones AWS
+- Normalización/parseo de precios en PHP y JS (eliminación de invisibles, NBSP y entidades; parseo seguro a float; cálculo de descuento por precios).
+- Vista previa del carrusel funcional en el editor, reutilizando el mismo DOM/CSS.
+- Limpieza de archivos de diagnóstico y pruebas antes de publicar en repositorio.
 
 ## 🚀 Características principales
 
@@ -63,7 +61,7 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos, múlt
 - **Grid responsivo** - Layout optimizado para múltiples productos
 - **Sincronización editor-frontend** - Vista previa exacta
 
-### 🔧 Integración wordPress
+### 🔧 Integración WordPress
 - **Bloque Gutenberg** nativo con editor visual sincronizado
 - **Shortcode tradicional** compatible con cualquier tema
 - **Responsive design** adaptado a todos los dispositivos
@@ -90,13 +88,23 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos, múlt
 4. Configura las opciones de mostrado
 
 ### Shortcode
-```php
-[cosas-amazon url="https://amzn.to/xxxxxxx" style="card"]
+- Soportados: `[amazon_producto]` y alias `[cosas-amazon]`
+
+Ejemplo básico:
+```text
+[amazon_producto url="https://amzn.to/xxxxxxx" style="horizontal" size="medium"]
 ```
 
 ### Múltiples productos
-```php
-[cosas-amazon url="https://amzn.to/xxxxxxx,https://amzn.to/yyyyyyy" style="carousel"]
+Puedes pasar varias URLs separadas por comas en el atributo `url`.
+
+```text
+[cosas-amazon url="https://amzn.to/xxxxxxx, https://amzn.to/yyyyyyy" style="carousel"]
+```
+
+También funciona con el shortcode principal:
+```text
+[amazon_producto url="https://amzn.to/aaaaaaa, https://amzn.to/bbbbbbb" style="table"]
 ```
 
 ## ⚙️ Configuración
