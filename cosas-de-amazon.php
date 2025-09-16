@@ -19,6 +19,11 @@ define('COSAS_AMAZON_VERSION', '2.12.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
+// Cargar traducciones del plugin
+add_action('plugins_loaded', function() {
+    load_plugin_textdomain('cosas-de-amazon', false, dirname(plugin_basename(__FILE__)) . '/languages');
+});
+
 // Incluir archivos necesarios y core modular
 require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/helpers.php';
 require_once COSAS_AMAZON_PLUGIN_PATH . 'core/class-cosas-de-amazon.php';

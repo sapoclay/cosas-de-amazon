@@ -2,7 +2,7 @@
 
 <img width="1024" height="1024" alt="logo" src="https://github.com/user-attachments/assets/41e86344-90d3-497d-98af-30fa1e165510" />
 
-Plugin para mostrar productos de Amazon con extracción avanzada de datos, múltiples estilos de visualización y sistema de limitaciones progresivas. Optimizado para Amazon España con soporte completo para formato europeo de precios.
+Este es un plugin para mostrar productos de Amazon con extracción avanzada de datos, múltiples estilos de visualización y sistema de limitaciones progresivas. Optimizado para Amazon España con soporte completo para formato europeo de precios.
 
 ## 🆕 Versión 2.12.0 - Correcciones y Limpieza
 
@@ -26,7 +26,7 @@ Plugin para mostrar productos de Amazon con extracción avanzada de datos, múlt
 - **Imágenes de alta calidad** con fallbacks automáticos
 - **Caché inteligente** para optimizar rendimiento
 
-### 🎨 Estilos de Visualización
+### 🎨 Estilos de visualización
 <img width="574" height="291" alt="horizontal" src="https://github.com/user-attachments/assets/c3782d5d-1d47-4495-9bfe-8ef806d6a825" />
 
 - **Horizontal** - Layout tradicional con imagen izquierda (máx. 2 productos)
@@ -219,12 +219,6 @@ add_filter('cosas_amazon_output_html', 'mi_html_personalizado');
 - **Precios no aparecen**: Verificar configuración de caché y debugging
 - **Imágenes no cargan**: Comprobar conectividad y fallbacks
 - **Errores de formato**: Revisar configuración regional
-
-### Debugging
-
-<img width="338" height="578" alt="diagnositico" src="https://github.com/user-attachments/assets/b133e0bf-d592-4c87-876e-716c7c9a1128" />
-
-Activar el modo debug en la configuración del plugin para obtener información detallada sobre el procesamiento.
 
 ## 📄 Licencia
 
