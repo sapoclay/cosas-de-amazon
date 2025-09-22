@@ -44,48 +44,58 @@ class CosasAmazonPriceAlerts {
             return;
         }
         
-        // Crear tabla si no existe
-        $this->create_alerts_table();
+        // Crear tabla si no existe (protegido)
+        try { $this->create_alerts_table(); } catch (\Throwable $e) {}
         
         global $wpdb;
+        $prev = $wpdb->suppress_errors();
+        $wpdb->suppress_errors(true);
         $table_name = $wpdb->prefix . 'cosas_amazon_price_alerts';
         
         // Verificar si ya existe una alerta para este email y producto
-        $existing_alert = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE email = %s AND product_url = %s AND status = 'active'",
-            $email, $product_url
-        ));
+        $existing_alert = null;
+        try {
+            $existing_alert = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table_name WHERE email = %s AND product_url = %s AND status = 'active'",
+                $email, $product_url
+            ));
+        } catch (\Throwable $e) {}
         
         if ($existing_alert) {
             // Actualizar alerta existente
-            $wpdb->update(
-                $table_name,
-                array(
-                    'target_price' => $target_price,
-                    'current_price' => $current_price,
-                    'updated_at' => current_time('mysql')
-                ),
-                array('id' => $existing_alert->id),
-                array('%f', '%f', '%s'),
-                array('%d')
-            );
+            try {
+                $wpdb->update(
+                    $table_name,
+                    array(
+                        'target_price' => $target_price,
+                        'current_price' => $current_price,
+                        'updated_at' => current_time('mysql')
+                    ),
+                    array('id' => $existing_alert->id),
+                    array('%f', '%f', '%s'),
+                    array('%d')
+                );
+            } catch (\Throwable $e) {}
             
             wp_send_json_success(array('message' => 'Alerta de precio actualizada correctamente'));
         } else {
             // Crear nueva alerta
-            $result = $wpdb->insert(
-                $table_name,
-                array(
-                    'email' => $email,
-                    'product_url' => $product_url,
-                    'target_price' => $target_price,
-                    'current_price' => $current_price,
-                    'status' => 'active',
-                    'created_at' => current_time('mysql'),
-                    'updated_at' => current_time('mysql')
-                ),
-                array('%s', '%s', '%f', '%f', '%s', '%s', '%s')
-            );
+            $result = false;
+            try {
+                $result = $wpdb->insert(
+                    $table_name,
+                    array(
+                        'email' => $email,
+                        'product_url' => $product_url,
+                        'target_price' => $target_price,
+                        'current_price' => $current_price,
+                        'status' => 'active',
+                        'created_at' => current_time('mysql'),
+                        'updated_at' => current_time('mysql')
+                    ),
+                    array('%s', '%s', '%f', '%f', '%s', '%s', '%s')
+                );
+            } catch (\Throwable $e) {}
             
             if ($result) {
                 wp_send_json_success(array('message' => 'Alerta de precio creada correctamente'));
@@ -93,6 +103,7 @@ class CosasAmazonPriceAlerts {
                 wp_send_json_error('Error al crear la alerta de precio');
             }
         }
+        $wpdb->suppress_errors($prev);
     }
     
     /**
@@ -113,16 +124,21 @@ class CosasAmazonPriceAlerts {
         }
         
         global $wpdb;
+        $prev = $wpdb->suppress_errors();
+        $wpdb->suppress_errors(true);
         $table_name = $wpdb->prefix . 'cosas_amazon_price_alerts';
         
         // Desactivar todas las alertas del email
-        $wpdb->update(
-            $table_name,
-            array('status' => 'unsubscribed', 'updated_at' => current_time('mysql')),
-            array('email' => $email),
-            array('%s', '%s'),
-            array('%s')
-        );
+        try {
+            $wpdb->update(
+                $table_name,
+                array('status' => 'unsubscribed', 'updated_at' => current_time('mysql')),
+                array('email' => $email),
+                array('%s', '%s'),
+                array('%s')
+            );
+        } catch (\Throwable $e) {}
+        $wpdb->suppress_errors($prev);
         
         wp_die('Te has desuscrito correctamente de todas las alertas de precio.');
     }
@@ -132,10 +148,13 @@ class CosasAmazonPriceAlerts {
      */
     public function check_price_alerts() {
         global $wpdb;
+        $prev = $wpdb->suppress_errors();
+        $wpdb->suppress_errors(true);
         $table_name = $wpdb->prefix . 'cosas_amazon_price_alerts';
         
         // Verificar si la tabla existe
         if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
+            $wpdb->suppress_errors($prev);
             return;
         }
         
@@ -151,7 +170,7 @@ class CosasAmazonPriceAlerts {
         $processed_urls = array();
         $triggered_alerts = array();
         
-        foreach ($active_alerts as $alert) {
+    foreach ($active_alerts as $alert) {
             // Evitar procesar la misma URL múltiples veces
             if (in_array($alert->product_url, $processed_urls)) {
                 continue;
@@ -159,14 +178,25 @@ class CosasAmazonPriceAlerts {
             
             $processed_urls[] = $alert->product_url;
             
-            // Obtener precio actual del producto
+            // Obtener precio actual del producto (con fallback si no hay price_history)
             $product_data = CosasAmazonHelpers::get_product_data($alert->product_url, true);
-            
-            if (!$product_data || !isset($product_data['price_history']['current'])) {
+            if (!$product_data) {
                 continue;
             }
-            
-            $current_price = $product_data['price_history']['current'];
+            $current_price = null;
+            if (isset($product_data['price_history']['current'])) {
+                $current_price = floatval($product_data['price_history']['current']);
+            } elseif (!empty($product_data['price'])) {
+                // Normalizar y extraer precio numérico del string mostrado
+                $normalized = CosasAmazonHelpers::normalize_price_display($product_data['price']);
+                $numeric = CosasAmazonHelpers::extract_numeric_price($normalized);
+                if ($numeric > 0) {
+                    $current_price = $numeric;
+                }
+            }
+            if ($current_price === null) {
+                continue;
+            }
             
             // Buscar todas las alertas para este producto que se cumplan
             $url_alerts = $wpdb->get_results($wpdb->prepare(
@@ -182,17 +212,19 @@ class CosasAmazonPriceAlerts {
                 );
                 
                 // Marcar alerta como disparada
-                $wpdb->update(
-                    $table_name,
-                    array(
-                        'status' => 'triggered',
-                        'triggered_at' => current_time('mysql'),
-                        'final_price' => $current_price
-                    ),
-                    array('id' => $url_alert->id),
-                    array('%s', '%s', '%f'),
-                    array('%d')
-                );
+                try {
+                    $wpdb->update(
+                        $table_name,
+                        array(
+                            'status' => 'triggered',
+                            'triggered_at' => current_time('mysql'),
+                            'final_price' => $current_price
+                        ),
+                        array('id' => $url_alert->id),
+                        array('%s', '%s', '%f'),
+                        array('%d')
+                    );
+                } catch (\Throwable $e) {}
             }
         }
         
@@ -202,6 +234,7 @@ class CosasAmazonPriceAlerts {
         }
         
         cosas_amazon_log("Procesadas " . count($triggered_alerts) . " alertas de precio", 'info');
+        $wpdb->suppress_errors($prev);
     }
     
     /**

@@ -19,6 +19,13 @@ define('COSAS_AMAZON_VERSION', '2.12.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
+// Activar modo debug del plugin si está habilitado en configuración de emergencia o si WP_DEBUG está activo
+if (!defined('COSAS_AMAZON_DEBUG')) {
+    $emergency_config = get_option('cosas_amazon_emergency_config', []);
+    $debug_enabled = (!empty($emergency_config['debug_mode'])) || (defined('WP_DEBUG') && WP_DEBUG);
+    define('COSAS_AMAZON_DEBUG', $debug_enabled);
+}
+
 // Cargar traducciones del plugin
 add_action('plugins_loaded', function() {
     load_plugin_textdomain('cosas-de-amazon', false, dirname(plugin_basename(__FILE__)) . '/languages');
@@ -226,6 +233,10 @@ function cosas_amazon_activate() {
     
     $existing_options = get_option('cosas_amazon_options', array());
     $merged_options = array_merge($default_options, $existing_options);
+    // Ajuste: ocultar placeholders en frontend por defecto
+    if (!isset($merged_options['hide_placeholder_on_frontend'])) {
+        $merged_options['hide_placeholder_on_frontend'] = true;
+    }
     update_option('cosas_amazon_options', $merged_options);
     
     // Configuración específica para producción

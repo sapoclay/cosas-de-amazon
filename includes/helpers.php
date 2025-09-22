@@ -79,29 +79,74 @@ class CosasAmazonHelpers {
     }
 
     /**
-     * Normalizar precio para mostrar en formato español con símbolo de euro y sin caracteres invisibles.
+     * Normalizar precio para mostrar en formato español preservando exactamente los céntimos capturados.
+     * Preferimos el string original (dos dígitos de céntimos) y solo como último recurso formateamos por float.
      * Resultado: "1.234,56 €"
      */
     public static function normalize_price_display($price) {
         if (empty($price)) { return ''; }
         $s = html_entity_decode((string)$price, ENT_QUOTES, 'UTF-8');
-        // Eliminar BOM/ZW y caracteres invisibles: FEFF, ZWSP/ZWNJ/ZWJ, soft hyphen; convertir NBSP/narrow NBSP a espacio normal; quitar � (FFFD)
-        $s = preg_replace('/[\x{FEFF}\x{200B}-\x{200D}\x{00AD}\x{FFFD}]/u', '', $s);
-        $s = preg_replace('/[\x{00A0}\x{202F}]/u', ' ', $s);
+        // Eliminar invisibles y normalizar espacios
+        $s = preg_replace('/[\x{FEFF}\x{200B}-\x{200D}\x{00AD}\x{200E}\x{200F}\x{2060}\x{FFFD}]/u', '', $s);
+        $s = preg_replace('/[\x{00A0}\x{202F}\x{2007}\x{2002}\x{2003}\x{2004}\x{2005}\x{2006}\x{2008}\x{2009}\x{200A}\x{205F}]/u', ' ', $s);
         $s = preg_replace('/\s+/u', ' ', $s);
         $s = trim($s);
-        // Extraer valor numérico y formatear a es_ES (coma decimal, punto miles)
+
+        // Guard: si el string representa explícitamente un precio cero (0, 0,00, 0.00, con o sin €), no mostrarlo como 0,00 €
+        if (preg_match('/^\s*0+(?:[,.]0+)?\s*(?:€|eur)?\s*$/iu', $s)) {
+            return '';
+        }
+
+        // 1) Intento preferente: detectar enteros + separador decimal + dos dígitos y reconstruir sin alterar céntimos
+        // Formato europeo con coma decimal
+        if (preg_match('/(?<!\d)(\d{1,3}(?:[\.\s]\d{3})*|\d+),(\d{2})(?!\d)/u', $s, $m)) {
+            $int = preg_replace('/[^0-9]/', '', $m[1]);
+            // Reinsertar separadores de miles como punto
+            $int_fmt = number_format((int)$int, 0, ',', '.');
+            $cents = $m[2];
+            return $int_fmt . ',' . $cents . ' €';
+        }
+        // Formato con punto decimal (ej. JSON/LD) - convertimos a coma pero preservamos dos dígitos
+        if (preg_match('/(?<!\d)(\d{1,3}(?:[,\s]\d{3})*|\d+)\.(\d{2})(?!\d)/u', $s, $m)) {
+            $int = preg_replace('/[^0-9]/', '', $m[1]);
+            $int_fmt = number_format((int)$int, 0, ',', '.');
+            $cents = $m[2];
+            return $int_fmt . ',' . $cents . ' €';
+        }
+        // Si hay un solo dígito decimal, pad a dos (Amazon muestra dos)
+        if (preg_match('/(?<!\d)(\d{1,3}(?:[\.\s]\d{3})*|\d+)[,\.](\d)(?!\d)/u', $s, $m)) {
+            $int = preg_replace('/[^0-9]/', '', $m[1]);
+            $int_fmt = number_format((int)$int, 0, ',', '.');
+            $cents = $m[2] . '0';
+            return $int_fmt . ',' . $cents . ' €';
+        }
+
+        // 2) Solo enteros detectados: formatear como ",00 €"
+        if (preg_match('/\d+/', $s, $m)) {
+            $int = preg_replace('/[^0-9]/', '', $m[0]);
+            if ($int !== '') {
+                $intval = (int)$int;
+                if ($intval > 0) {
+                    $int_fmt = number_format($intval, 0, ',', '.');
+                    return $int_fmt . ',00 €';
+                }
+                // Si es 0, no formatear como precio
+            }
+        }
+
+        // 3) Último recurso: parseo numérico y formateo (puede redondear)
         $value = self::extract_numeric_price($s);
         if ($value > 0) {
             $formatted = number_format($value, 2, ',', '.');
             return $formatted . ' €';
         }
-        // Si no pudimos parsear, al menos asegurar símbolo € y quitar artefactos
+
+        // Asegurar espacio antes de € si hubiera números
         if (strpos($s, '€') === false && preg_match('/[0-9]/', $s)) {
             $s = $s . ' €';
         }
-        // Si viene como "€ 12,34" convertir a "12,34 €"
         $s = preg_replace('/^€\s*(.+)$/u', '$1 €', $s);
+        $s = preg_replace('/(\d)\s*€/u', '$1 €', $s);
         return trim($s);
     }
     
@@ -158,8 +203,21 @@ class CosasAmazonHelpers {
      * Obtener datos de fallback (datos simulados)
      */
     public static function get_fallback_data($asin) {
-        self::log_debug('Usando datos de fallback para ASIN: ' . $asin);
-        return self::get_simulated_data($asin, 'https://www.amazon.es/dp/' . $asin);
+        self::log_debug('Usando datos de fallback NEUTRAL para ASIN: ' . $asin);
+        // Devolver un placeholder neutral sin precios/valoraciones para evitar "productos de ejemplo"
+        return array(
+            'asin' => $asin,
+            'url' => 'https://www.amazon.es/dp/' . $asin,
+            'title' => 'Producto de Amazon – ' . $asin,
+            'price' => '',
+            'originalPrice' => '',
+            'discount' => '',
+            'image' => self::get_fallback_image($asin),
+            'description' => '',
+            'specialOffer' => '',
+            'rating' => '',
+            'reviewCount' => ''
+        );
     }
     
     /**
@@ -185,8 +243,22 @@ class CosasAmazonHelpers {
         }
         
         if (!$asin) {
-            self::log_debug('No se pudo extraer ASIN', $url);
-            return false;
+            // No se pudo extraer ASIN (común cuando no se puede resolver amzn.to/a.co por restricciones del servidor)
+            self::log_debug('No se pudo extraer ASIN - devolviendo placeholder mínimo', $url);
+            // Devolver datos mínimos para no dejar el bloque vacío
+            return array(
+                'asin' => '',
+                'url' => $final_url ?: $url,
+                'title' => 'Producto de Amazon',
+                'price' => '',
+                'originalPrice' => '',
+                'discount' => '',
+                'image' => self::get_fallback_image(''),
+                'description' => 'Consulta precio y detalles en la página del producto.',
+                'specialOffer' => '',
+                'rating' => '',
+                'reviewCount' => ''
+            );
         }
         
         self::log_debug('ASIN extraído: ' . $asin);
@@ -200,8 +272,13 @@ class CosasAmazonHelpers {
             }
         }
         
-        // Intentar primero con Amazon PA-API si está configurada
-        $product_data = self::get_product_data_from_api($asin);
+    // Inferir región desde la URL (es, fr, it, de, uk, us) si la opción está activa
+    $api_options = get_option('cosas_amazon_api_options', array());
+    // Inferir SIEMPRE la región desde la URL final resuelta; es seguro y evita marketplaces erróneos
+    $region_hint = self::infer_region_from_url($final_url);
+        
+    // Intentar primero con Amazon PA-API si está configurada, forzando la región inferida
+    $product_data = self::get_product_data_from_api($asin, $region_hint);
         
         // Si la API falla o no está configurada, usar scraping como fallback
         if (!$product_data) {
@@ -214,7 +291,7 @@ class CosasAmazonHelpers {
             }
         }
         
-        // Si todo falla, usar datos de fallback reales (no simulados)
+        // Si todo falla, usar datos de fallback neutrales (no simulados)
         if (!$product_data) {
             $general_options = get_option('cosas_amazon_options', array());
             $data_source = isset($general_options['data_source']) ? $general_options['data_source'] : 'real';
@@ -223,14 +300,10 @@ class CosasAmazonHelpers {
                 self::log_debug('Usando datos simulados según configuración');
                 $product_data = self::get_fallback_data($asin);
             } else {
-                // Intentar obtener datos básicos reales como último recurso
-                self::log_debug('Intentando obtener datos básicos reales como último recurso');
+                // Último recurso: placeholder neutral
+                self::log_debug('Usando placeholder neutral como último recurso');
                 $product_data = self::get_fallback_data($asin);
-                // Marcar que son datos de fallback pero no simulados
-                if ($product_data) {
-                    $product_data['is_fallback'] = true;
-                    $product_data['title'] = 'Producto de Amazon – ' . $asin;
-                }
+                if ($product_data) { $product_data['is_fallback'] = true; }
             }
         }
         
@@ -245,7 +318,7 @@ class CosasAmazonHelpers {
     /**
      * Obtener datos del producto usando Amazon PA-API
      */
-    public static function get_product_data_from_api($asin) {
+    public static function get_product_data_from_api($asin, $region_hint = null) {
         // Cargar clase PA-API si no está cargada
         if (!class_exists('CosasAmazonPAAPI')) {
             require_once dirname(__FILE__) . '/class-amazon-paapi.php';
@@ -258,12 +331,30 @@ class CosasAmazonHelpers {
             return false;
         }
         
-        self::log_debug('Intentando obtener datos con Amazon PA-API para ASIN: ' . $asin);
+    self::log_debug('Intentando obtener datos con Amazon PA-API para ASIN: ' . $asin . ($region_hint ? (' en región forzada: ' . $region_hint) : ''));
         
         try {
-            $api_data = $api->getProductData($asin);
+            if (!empty($region_hint)) {
+                // Forzar región detectada de la URL y evitar fallback cruzado de marketplace
+                if (method_exists($api, 'getProductDataForRegion')) {
+                    $api_data = $api->getProductDataForRegion($asin, $region_hint, true);
+                } else {
+                    // Compatibilidad por si no existe el método
+                    $api_data = $api->getProductData($asin);
+                }
+            } else {
+                $api_data = $api->getProductData($asin);
+            }
             
             if ($api_data && !empty($api_data['title'])) {
+                // Validación adicional: si hay región ES pero el precio aparenta USD o numéricamente es 0, desechar para forzar scraping
+                $price_str = isset($api_data['price']) ? (string)$api_data['price'] : '';
+                $num_val = self::extract_numeric_price($price_str);
+                $is_us_currency = (strpos($price_str, '$') !== false) || stripos($price_str, 'USD') !== false;
+                if (!empty($region_hint) && $region_hint === 'es' && ($is_us_currency || $num_val <= 0)) {
+                    self::log_debug('Precio/moneda inconsistente para ES desde PA-API, forzando scraping. Precio=' . $price_str);
+                    return false;
+                }
                 self::log_debug('Datos obtenidos exitosamente de Amazon PA-API');
                 return $api_data;
             } else {
@@ -275,6 +366,22 @@ class CosasAmazonHelpers {
             self::log_debug('Error en Amazon PA-API: ' . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Inferir región de Amazon a partir del host de la URL
+     */
+    public static function infer_region_from_url($url) {
+        $host = parse_url($url, PHP_URL_HOST);
+        if (!$host) return null;
+        $host = strtolower($host);
+        if (strpos($host, 'amazon.es') !== false) return 'es';
+        if (strpos($host, 'amazon.fr') !== false) return 'fr';
+        if (strpos($host, 'amazon.it') !== false) return 'it';
+        if (strpos($host, 'amazon.de') !== false) return 'de';
+        if (strpos($host, 'amazon.co.uk') !== false) return 'uk';
+        if (strpos($host, 'amazon.com') !== false) return 'us';
+        return null;
     }
     
     /**
@@ -395,52 +502,86 @@ class CosasAmazonHelpers {
         // Añadir delay aleatorio para evitar bloqueos
         sleep(rand(1, 2));
         
-        // Usar cURL para obtener el contenido
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($ch, CURLOPT_ENCODING, ''); // Dejar vacío para auto-decodificar
-        curl_setopt($ch, CURLOPT_COOKIEJAR, tempnam(sys_get_temp_dir(), 'cookies'));
-        curl_setopt($ch, CURLOPT_COOKIEFILE, tempnam(sys_get_temp_dir(), 'cookies'));
-        
-        $html = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
+        $html = '';
+        $http_code = 0;
+        $error = '';
+
+        if (function_exists('curl_init')) {
+            // Usar cURL si está disponible
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_ENCODING, ''); // Dejar vacío para auto-decodificar
+            curl_setopt($ch, CURLOPT_COOKIEJAR, tempnam(sys_get_temp_dir(), 'cookies'));
+            curl_setopt($ch, CURLOPT_COOKIEFILE, tempnam(sys_get_temp_dir(), 'cookies'));
+
+            $html = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+        } else if (function_exists('wp_remote_get')) {
+            // Fallback: WordPress HTTP API
+            $response = @wp_remote_get($url, array(
+                'timeout' => $timeout,
+                'redirection' => 5,
+                'sslverify' => false,
+                'headers' => array(
+                    'User-Agent' => $headers[0] ?? 'Mozilla/5.0',
+                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language' => 'es-ES,es;q=0.9,en;q=0.8',
+                    'Cache-Control' => 'no-cache',
+                    'Pragma' => 'no-cache'
+                ),
+            ));
+            if (!is_wp_error($response)) {
+                $http_code = intval(wp_remote_retrieve_response_code($response));
+                $html = wp_remote_retrieve_body($response);
+            } else {
+                $error = $response->get_error_message();
+            }
+        } else {
+            // Sin cURL ni WP HTTP API
+            self::log_debug('No hay cURL ni WP HTTP API disponible para scraping');
+            return false;
+        }
         
         // Verificar y descomprimir si es necesario
         if ($html && strlen($html) > 0) {
             // Verificar si está comprimido
             if (substr($html, 0, 2) == "\x1f\x8b") {
                 // Gzip comprimido
-                $decompressed = @gzdecode($html);
-                if ($decompressed !== false) {
-                    $html = $decompressed;
-                    self::log_debug("HTML descomprimido con gzdecode: " . strlen($html) . " bytes");
-                } else {
-                    // Intentar con gzinflate
-                    $decompressed = @gzinflate(substr($html, 10, -8));
+                if (function_exists('gzdecode')) {
+                    $decompressed = @gzdecode($html);
                     if ($decompressed !== false) {
                         $html = $decompressed;
-                        self::log_debug("HTML descomprimido con gzinflate: " . strlen($html) . " bytes");
-                    } else {
-                        self::log_debug("No se pudo descomprimir HTML gzip");
+                        self::log_debug("HTML descomprimido con gzdecode: " . strlen($html) . " bytes");
+                    } else if (function_exists('gzinflate')) {
+                        // Intentar con gzinflate
+                        $decompressed = @gzinflate(substr($html, 10, -8));
+                        if ($decompressed !== false) {
+                            $html = $decompressed;
+                            self::log_debug("HTML descomprimido con gzinflate: " . strlen($html) . " bytes");
+                        } else {
+                            self::log_debug("No se pudo descomprimir HTML gzip");
+                        }
                     }
                 }
             } else if (substr($html, 0, 2) == "\x78\x9c") {
                 // Deflate comprimido
-                $decompressed = @gzinflate($html);
-                if ($decompressed !== false) {
-                    $html = $decompressed;
-                    self::log_debug("HTML descomprimido con deflate: " . strlen($html) . " bytes");
-                } else {
-                    self::log_debug("No se pudo descomprimir HTML deflate");
+                if (function_exists('gzinflate')) {
+                    $decompressed = @gzinflate($html);
+                    if ($decompressed !== false) {
+                        $html = $decompressed;
+                        self::log_debug("HTML descomprimido con deflate: " . strlen($html) . " bytes");
+                    } else {
+                        self::log_debug("No se pudo descomprimir HTML deflate");
+                    }
                 }
             } else {
                 self::log_debug("HTML no comprimido: " . strlen($html) . " bytes");
@@ -510,7 +651,7 @@ class CosasAmazonHelpers {
      * Heurística: detectar contexto de precio por unidad (ml, L, kg, pack, xN) y ratios sospechosos
      */
     public static function is_suspicious_unit_price_context($title, $original_price_str, $current_price_str) {
-        $title_lc = mb_strtolower($title ?? '');
+    $title_lc = function_exists('mb_strtolower') ? mb_strtolower($title ?? '') : strtolower($title ?? '');
         $looks_like_unit = false;
         if (!empty($title_lc)) {
             $unit_patterns = [
@@ -526,7 +667,7 @@ class CosasAmazonHelpers {
             }
         }
         // También detectar en el string del original si parece €/L, €/kg, €/100ml
-        $orig_lc = mb_strtolower($original_price_str ?? '');
+    $orig_lc = function_exists('mb_strtolower') ? mb_strtolower($original_price_str ?? '') : strtolower($original_price_str ?? '');
         if (!$looks_like_unit && $orig_lc) {
             if (preg_match('/(€|eur)\s*\/\s*(l|kg|100\s?g|100\s?ml)/i', $orig_lc)) {
                 $looks_like_unit = true;
@@ -549,7 +690,9 @@ class CosasAmazonHelpers {
      */
     public static function parse_amazon_html($html, $asin, $url) {
         // Convertir HTML a UTF-8 si es necesario
-        $html = mb_convert_encoding($html, 'UTF-8', 'auto');
+        $html = function_exists('mb_convert_encoding')
+            ? mb_convert_encoding($html, 'UTF-8', 'auto')
+            : (function_exists('iconv') ? @iconv('UTF-8', 'UTF-8//IGNORE', $html) : $html);
         
         $product_data = array(
             'asin' => $asin,
@@ -689,6 +832,15 @@ class CosasAmazonHelpers {
                         self::log_debug("Precio encontrado con patrón $i: " . $price_text);
                         break;
                     }
+                }
+            }
+
+            // Si el precio extraído es cero o inválido, limpiarlo para activar fallback "Ver precio en Amazon"
+            if (!empty($product_data['price'])) {
+                $num_check = self::extract_numeric_price($product_data['price']);
+                if ($num_check <= 0) {
+                    self::log_debug('Precio extraído no válido (0). Limpiando para usar texto por defecto.');
+                    $product_data['price'] = '';
                 }
             }
         }
@@ -1374,15 +1526,16 @@ class CosasAmazonHelpers {
      */
     public static function get_intelligent_fallback($asin, $url) {
         // Intentar obtener al menos la imagen del producto
-        $image = self::get_direct_amazon_image($asin);
+        $image = self::get_fallback_image($asin);
         
+        // Devolver datos neutrales sin precio/ratings simulados
         return array(
             'title' => 'Producto de Amazon – ' . $asin,
-            'price' => '29,99€',
+            'price' => '',
             'originalPrice' => '',
             'discount' => '',
             'image' => $image,
-            'description' => 'Producto tecnológico avanzado con características premium. Diseño moderno y funcionalidad intuitiva.',
+            'description' => '',
             'asin' => $asin,
             'url' => $url,
             'specialOffer' => '',
@@ -1397,16 +1550,16 @@ class CosasAmazonHelpers {
     public static function get_simulated_data($asin, $url) {
         return array(
             'title' => 'Producto de Amazon (Simulado) - ' . $asin,
-            'price' => '29,99€',
-            'originalPrice' => '39,99€',
-            'discount' => '25',
+            'price' => '',
+            'originalPrice' => '',
+            'discount' => '',
             'image' => 'https://via.placeholder.com/300x300.png?text=Producto+Amazon',
-            'description' => 'Producto de Amazon con excelente calidad y garantía (datos simulados para testing).',
+            'description' => 'Datos simulados para pruebas. Sustituye por una URL real para ver precio.',
             'asin' => $asin,
             'url' => $url,
-            'specialOffer' => 'Oferta especial',
-            'rating' => '4.5',
-            'reviewCount' => '2847'
+            'specialOffer' => '',
+            'rating' => '',
+            'reviewCount' => ''
         );
     }
     
@@ -1448,6 +1601,15 @@ class CosasAmazonHelpers {
             } else {
                 // Separador de miles: 1,234
                 $clean_price = str_replace(',', '', $clean_price);
+            }
+        } elseif (strpos($clean_price, '.') !== false) {
+            // Solo puntos
+            if (preg_match('/\.\d{1,2}$/', $clean_price)) {
+                // Formato decimal: 12.34
+                // No hacer nada, ya está en formato correcto
+            } else {
+                // Separador de miles: 1.234 -> eliminar puntos
+                $clean_price = str_replace('.', '', $clean_price);
             }
         }
         

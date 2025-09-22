@@ -100,26 +100,34 @@ class CosasAmazonStats {
         global $wpdb;
         
         $table_name = $wpdb->prefix . 'cosas_amazon_stats';
-        
-        // Verificar si la tabla existe
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
-            $this->create_stats_table();
+        // Suprimir errores para no provocar 500 si hay problemas de BD
+        $prev = $wpdb->suppress_errors();
+        $wpdb->suppress_errors(true);
+        try {
+            // Verificar si la tabla existe
+            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
+                $this->create_stats_table();
+            }
+            // Insertar fila
+            $wpdb->insert(
+                $table_name,
+                array(
+                    'action' => $action,
+                    'post_id' => $data['post_id'] ?? 0,
+                    'product_url' => $data['product_url'] ?? '',
+                    'style' => $data['style'] ?? '',
+                    'user_id' => $data['user_id'] ?? 0,
+                    'ip_address' => $data['ip_address'] ?? '',
+                    'user_agent' => substr($data['user_agent'] ?? '', 0, 500),
+                    'created_at' => current_time('mysql')
+                ),
+                array('%s', '%d', '%s', '%s', '%d', '%s', '%s', '%s')
+            );
+        } catch (\Throwable $e) {
+            // Silenciar: no bloquear la carga del sitio por estadísticas
+        } finally {
+            $wpdb->suppress_errors($prev);
         }
-        
-        $wpdb->insert(
-            $table_name,
-            array(
-                'action' => $action,
-                'post_id' => $data['post_id'] ?? 0,
-                'product_url' => $data['product_url'] ?? '',
-                'style' => $data['style'] ?? '',
-                'user_id' => $data['user_id'] ?? 0,
-                'ip_address' => $data['ip_address'] ?? '',
-                'user_agent' => substr($data['user_agent'] ?? '', 0, 500),
-                'created_at' => current_time('mysql')
-            ),
-            array('%s', '%d', '%s', '%s', '%d', '%s', '%s', '%s')
-        );
     }
     
     /**

@@ -209,6 +209,36 @@ class CosasAmazonPAAPI {
     public function getProductData($asin) {
         return $this->getProductDataWithFallback($asin);
     }
+
+    /**
+     * Obtener datos para una región concreta. Si $strict es true, no hace fallbacks de región.
+     */
+    public function getProductDataForRegion($asin, $region, $strict = false) {
+        $this->clearLastError();
+        if (!$this->isConfigured() || !$this->isEnabled()) {
+            $this->last_error = 'No configurado o deshabilitado';
+            return false;
+        }
+        $original_region = $this->region;
+        $original_host = $this->host;
+        $this->region = $region;
+        $this->host = $this->getHostForRegion($region);
+        $result = $this->tryGetProductDataFromRegion($asin, $region);
+        if ($result !== false) {
+            $this->recordCircuitSuccess();
+            // Restaurar
+            $this->region = $original_region;
+            $this->host = $original_host;
+            return $result;
+        }
+        // Restaurar siempre
+        $this->region = $original_region;
+        $this->host = $original_host;
+        if ($strict) {
+            return false;
+        }
+        return $this->getProductDataWithFallback($asin);
+    }
     
     /**
      * Obtener datos con fallback inteligente multi-región
@@ -557,7 +587,8 @@ class CosasAmazonPAAPI {
     private function makeRequestWithRetry($operation, $payload, $max_retries = 7) {
         $last_exception = null;
         $base_delay = 0.5; // Delay inicial más corto
-        $is_local = $this->isLocalEnvironment();
+    $env_info_tmp = $this->detectLocalEnvironment();
+    $is_local = is_array($env_info_tmp) ? ($env_info_tmp['is_local'] ?? false) : false;
         
         // Si es entorno local, reducir reintentos (InternalFailure es muy común)
         if ($is_local) {
@@ -623,7 +654,7 @@ class CosasAmazonPAAPI {
                 error_log('[CosasAmazon PA-API] ⏱️ Esperando ' . round($total_delay, 2) . ' segundos antes del siguiente intento...');
                 
                 // WordPress-compatible sleep
-                usleep($total_delay * 1000000); // Usar microsleep para mayor precisión
+                usleep((int) ($total_delay * 1000000)); // Usar microsleep para mayor precisión
             }
         }
         
@@ -663,7 +694,8 @@ class CosasAmazonPAAPI {
         $server_addr = $_SERVER['SERVER_ADDR'] ?? 'Unknown';
         $http_host = $_SERVER['HTTP_HOST'] ?? 'Unknown';
         $server_port = $_SERVER['SERVER_PORT'] ?? 'Unknown';
-        $is_local = $this->isLocalEnvironment();
+    $env_info_tmp = $this->detectLocalEnvironment();
+    $is_local = is_array($env_info_tmp) ? ($env_info_tmp['is_local'] ?? false) : false;
         
         // Determinar indicador principal
         $indicator = 'production';
@@ -1166,7 +1198,7 @@ class CosasAmazonPAAPI {
             error_log('[CosasAmazon PA-API] Test falló con excepción: ' . $e->getMessage());
             
             // Detectar si estamos en entorno local
-            $local_env = $this->isLocalEnvironment();
+            $local_env = $this->detectLocalEnvironment();
             
             // Proporcionar información más detallada sobre el error
             $error_message = $e->getMessage();

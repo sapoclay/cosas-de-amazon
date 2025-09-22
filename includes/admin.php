@@ -14,7 +14,8 @@ class CosasAmazonAdmin {
         add_action('admin_head', array($this, 'check_menu_exists'));
         
         // AJAX handlers para administración
-        add_action('wp_ajax_cosas_amazon_force_update', array($this, 'ajax_force_update'));
+    add_action('wp_ajax_cosas_amazon_force_update', array($this, 'ajax_force_update'));
+    add_action('wp_ajax_cosas_amazon_update_status', array($this, 'ajax_update_status'));
         add_action('wp_ajax_cosas_amazon_debug', array($this, 'ajax_debug'));
         add_action('wp_ajax_get_cache_stats', array($this, 'ajax_get_cache_stats'));
         add_action('wp_ajax_clear_cache', array($this, 'ajax_clear_cache'));
@@ -71,7 +72,7 @@ class CosasAmazonAdmin {
         // Sanitizar umbral de descuento
         $sanitized['high_discount_threshold'] = isset($options['high_discount_threshold']) ? max(0, min(100, intval($options['high_discount_threshold']))) : 50;
         
-        // Sanitizar colores
+    // Sanitizar colores
         $sanitized['primary_color'] = isset($options['primary_color']) ? (sanitize_hex_color($options['primary_color']) ?: '#e47911') : '#e47911';
         $sanitized['secondary_color'] = isset($options['secondary_color']) ? (sanitize_hex_color($options['secondary_color']) ?: '#232f3e') : '#232f3e';
         $sanitized['accent_color'] = isset($options['accent_color']) ? (sanitize_hex_color($options['accent_color']) ?: '#ff9900') : '#ff9900';
@@ -114,6 +115,76 @@ class CosasAmazonAdmin {
         $sanitized['default_block_size'] = isset($options['default_block_size']) && in_array($options['default_block_size'], $allowed_block_sizes) ? $options['default_block_size'] : 'medium';
         $sanitized['default_products_per_row'] = isset($options['default_products_per_row']) ? max(1, min(4, intval($options['default_products_per_row']))) : 2;
         
+        // Sanitizar efectos (faltaban en la versión anterior)
+        $allowed_hover_effects = array('none', 'scale', 'lift', 'glow');
+        $sanitized['hover_effect'] = isset($options['hover_effect']) && in_array($options['hover_effect'], $allowed_hover_effects) ? $options['hover_effect'] : 'scale';
+        $allowed_shadow_styles = array('none', 'light', 'medium', 'strong');
+        $sanitized['shadow_style'] = isset($options['shadow_style']) && in_array($options['shadow_style'], $allowed_shadow_styles) ? $options['shadow_style'] : 'medium';
+        $allowed_animation_speeds = array('slow', 'normal', 'fast');
+        $sanitized['animation_speed'] = isset($options['animation_speed']) && in_array($options['animation_speed'], $allowed_animation_speeds) ? $options['animation_speed'] : 'normal';
+        $sanitized['gradient_enable'] = !empty($options['gradient_enable']);
+
+        // Nuevos: colores del gradiente con valores por defecto seguros
+        $sanitized['gradient_start'] = isset($options['gradient_start']) ? (sanitize_hex_color($options['gradient_start']) ?: '#667eea') : '#667eea';
+        $sanitized['gradient_end']   = isset($options['gradient_end']) ? (sanitize_hex_color($options['gradient_end']) ?: '#764ba2') : '#764ba2';
+
+        // Sanitizar tema predefinido (style_preset) y aplicar mapeo de colores al cambiar
+        $allowed_presets = array('default', 'minimal', 'modern', 'dark', 'vibrant');
+        $new_preset = isset($options['style_preset']) && in_array($options['style_preset'], $allowed_presets) ? $options['style_preset'] : 'default';
+        $sanitized['style_preset'] = $new_preset;
+
+        // Detectar si cambió el preset respecto a lo ya guardado
+        $prev = get_option('cosas_amazon_options', array());
+        $prev_preset = isset($prev['style_preset']) ? $prev['style_preset'] : 'default';
+        if ($new_preset !== $prev_preset) {
+            switch ($new_preset) {
+                case 'minimal':
+                    $sanitized['primary_color'] = '#333333';
+                    $sanitized['secondary_color'] = '#6c757d';
+                    $sanitized['accent_color'] = '#6c757d';
+                    $sanitized['text_color'] = '#333333';
+                    $sanitized['background_color'] = '#f8f9fa';
+                    $sanitized['shadow_style'] = 'light';
+                    $sanitized['hover_effect'] = 'none';
+                    break;
+                case 'modern':
+                    $sanitized['primary_color'] = '#667eea';
+                    $sanitized['secondary_color'] = '#764ba2';
+                    $sanitized['accent_color'] = '#f093fb';
+                    $sanitized['text_color'] = '#1f2937';
+                    $sanitized['background_color'] = '#ffffff';
+                    $sanitized['gradient_enable'] = true;
+                    $sanitized['hover_effect'] = 'lift';
+                    $sanitized['shadow_style'] = 'medium';
+                    // Alinear gradiente por defecto del preset moderno
+                    $sanitized['gradient_start'] = '#667eea';
+                    $sanitized['gradient_end'] = '#764ba2';
+                    break;
+                case 'dark':
+                    $sanitized['primary_color'] = '#ff6b6b';
+                    $sanitized['secondary_color'] = '#333333';
+                    $sanitized['accent_color'] = '#ff6b6b';
+                    $sanitized['text_color'] = '#f0f0f0';
+                    $sanitized['background_color'] = '#1a1a1a';
+                    $sanitized['hover_effect'] = 'glow';
+                    $sanitized['shadow_style'] = 'strong';
+                    break;
+                case 'vibrant':
+                    $sanitized['primary_color'] = '#ff6b6b';
+                    $sanitized['secondary_color'] = '#4ecdc4';
+                    $sanitized['accent_color'] = '#45b7d1';
+                    $sanitized['text_color'] = '#333333';
+                    $sanitized['background_color'] = '#ffffff';
+                    $sanitized['hover_effect'] = 'scale';
+                    $sanitized['shadow_style'] = 'medium';
+                    break;
+                case 'default':
+                default:
+                    // Valores por defecto ya establecidos arriba
+                    break;
+            }
+        }
+
         return $sanitized;
     }
     
@@ -166,6 +237,9 @@ class CosasAmazonAdmin {
         
         // Habilitar/deshabilitar API
         $sanitized['api_enabled'] = !empty($options['api_enabled']) ? 1 : 0;
+
+        // Forzar región según URL
+        $sanitized['force_region_from_url'] = !empty($options['force_region_from_url']) ? 1 : 0;
         
         // Access Key ID
         $sanitized['amazon_access_key'] = isset($options['amazon_access_key']) ? sanitize_text_field(trim($options['amazon_access_key'])) : '';
@@ -201,26 +275,35 @@ class CosasAmazonAdmin {
         $text_color = isset($options['text_color']) ? $options['text_color'] : '#333333';
         $background_color = isset($options['background_color']) ? $options['background_color'] : '#ffffff';
         
-        $css .= ".cosas-amazon-product {\n";
-        $css .= "    background-color: {$background_color} !important;\n";
-        $css .= "    color: {$text_color} !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product {\n";
+    $css .= "    background-color: {$background_color};\n";
+    $css .= "    color: {$text_color};\n";
+    $css .= "}\n\n";
         
-        $css .= ".cosas-amazon-product .cosas-amazon-title {\n";
-        $css .= "    color: {$text_color} !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product .cosas-amazon-title {\n";
+    $css .= "    color: {$text_color};\n";
+    $css .= "}\n\n";
         
-        $css .= ".cosas-amazon-product .cosas-amazon-price {\n";
-        $css .= "    color: {$primary_color} !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product .cosas-amazon-price {\n";
+    $css .= "    color: {$primary_color};\n";
+    $css .= "}\n\n";
         
     // Nota: No aplicar background/border al contenedor .cosas-amazon-button
     // para evitar una barra de color a lo ancho. El color del botón
     // se gestiona en .cosas-amazon-btn desde los estilos base.
         
-        $css .= ".cosas-amazon-product .cosas-amazon-discount {\n";
-        $css .= "    color: {$accent_color} !important;\n";
-        $css .= "}\n\n";
+    // Descuento: fondo con color de acento y texto blanco
+    $css .= ".cosas-amazon-product:not(.cosas-amazon-featured) .cosas-amazon-discount {\n";
+    $css .= "    background-color: {$accent_color};\n";
+    $css .= "    color: #fff;\n";
+    $css .= "}\n\n";
+
+    // Coherencia en otros componentes (carousel y tabla)
+    $css .= ".cosas-amazon-carousel-item .cosas-amazon-discount,\n";
+    $css .= ".cosas-amazon-table-discount .cosas-amazon-discount {\n";
+    $css .= "    background-color: {$accent_color};\n";
+    $css .= "    color: #fff;\n";
+    $css .= "}\n\n";
         
         // Tipografía personalizada
         $font_family = isset($options['font_family']) ? $options['font_family'] : 'default';
@@ -250,22 +333,22 @@ class CosasAmazonAdmin {
             
             if ($font_stack) {
                 $css .= ".cosas-amazon-product {\n";
-                $css .= "    font-family: {$font_stack} !important;\n";
+                $css .= "    font-family: {$font_stack};\n";
                 $css .= "}\n\n";
             }
         }
         
-        $css .= ".cosas-amazon-product .cosas-amazon-title {\n";
-        $css .= "    font-size: {$title_size}px !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product .cosas-amazon-title {\n";
+    $css .= "    font-size: {$title_size}px;\n";
+    $css .= "}\n\n";
         
-        $css .= ".cosas-amazon-product .cosas-amazon-description {\n";
-        $css .= "    font-size: {$text_size}px !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product .cosas-amazon-description {\n";
+    $css .= "    font-size: {$text_size}px;\n";
+    $css .= "}\n\n";
         
-        $css .= ".cosas-amazon-product .cosas-amazon-price {\n";
-        $css .= "    font-size: {$price_size}px !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product .cosas-amazon-price {\n";
+    $css .= "    font-size: {$price_size}px;\n";
+    $css .= "}\n\n";
         
         // Espaciado personalizado
         $card_padding = isset($options['card_padding']) ? $options['card_padding'] : '15';
@@ -273,16 +356,16 @@ class CosasAmazonAdmin {
         $border_radius = isset($options['border_radius']) ? $options['border_radius'] : '8';
         $image_size = isset($options['image_size']) ? $options['image_size'] : '150';
         
-        $css .= ".cosas-amazon-product {\n";
-        $css .= "    padding: {$card_padding}px !important;\n";
-        $css .= "    margin: {$card_margin}px 0 !important;\n";
-        $css .= "    border-radius: {$border_radius}px !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product {\n";
+    $css .= "    padding: {$card_padding}px;\n";
+    $css .= "    margin: {$card_margin}px 0;\n";
+    $css .= "    border-radius: {$border_radius}px;\n";
+    $css .= "}\n\n";
         
-        $css .= ".cosas-amazon-product .cosas-amazon-image img {\n";
-        $css .= "    max-width: {$image_size}px !important;\n";
-        $css .= "    max-height: {$image_size}px !important;\n";
-        $css .= "}\n\n";
+    $css .= ".cosas-amazon-product .cosas-amazon-image img {\n";
+    $css .= "    max-width: {$image_size}px;\n";
+    $css .= "    max-height: {$image_size}px;\n";
+    $css .= "}\n\n";
         
         return $css;
     }
@@ -631,6 +714,20 @@ class CosasAmazonAdmin {
             jQuery(document).ready(function($) {
                 console.log("Cosas Amazon Admin JS cargado");
                 
+                // Toggle de colores de gradiente y previsualización
+                function updateGradientPreview() {
+                    var start = $("#gradient_start").val() || "#667eea";
+                    var end = $("#gradient_end").val() || "#764ba2";
+                    $("#gradient_preview_box").css("background", "linear-gradient(90deg, " + start + ", " + end + ")");
+                }
+                $(document).on("change input", "#gradient_enable", function(){
+                    var enabled = $(this).is(":checked");
+                    $("#gradient_colors_wrap").stop(true,true).slideToggle(enabled);
+                });
+                $(document).on("change input", "#gradient_start, #gradient_end", updateGradientPreview);
+                // Inicializar por si el DOM llega tras inyección
+                updateGradientPreview();
+
                 // Verificar que las variables están disponibles
                 if (typeof cosas_amazon_admin === "undefined") {
                     console.error("Variables cosas_amazon_admin no están definidas");
@@ -641,7 +738,7 @@ class CosasAmazonAdmin {
                 function makeAjaxRequest(action, button, resultsDiv, successCallback) {
                     var originalText = button.text();
                     button.prop("disabled", true).text("Procesando...");
-                    resultsDiv.html("<div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"></div>");
+                    resultsDiv.html("<div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"}");
                     
                     $.ajax({
                         url: cosas_amazon_admin.ajax_url,
@@ -670,34 +767,44 @@ class CosasAmazonAdmin {
                     });
                 }
                 
-                // Botón para limpiar cache
+                // Botón para limpiar cache (panel principal)
                 $(document).on("click", "#clear-cache-btn", function() {
                     if (!confirm("¿Estás seguro de que quieres limpiar todo el cache?")) {
                         return;
                     }
                     
                     var btn = $(this);
-                    var resultsDiv = $("#cache-action-results");
+                    var resultsDiv = btn.closest(".wrap, .cosas-amazon-config-page, body").find("#cache-action-results");
+                    if (!resultsDiv.length) { resultsDiv = $("#cache-action-results"); }
                     
                     makeAjaxRequest("clear_cache", btn, resultsDiv);
                 });
+                // Botón para limpiar cache (panel lateral)
+                $(document).on("click", "#sidebar-clear-cache-btn", function() {
+                    if (!confirm("¿Estás seguro de que quieres limpiar todo el cache?")) {
+                        return;
+                    }
+                    var btn = $(this);
+                    var resultsDiv = $("#sidebar-cache-action-results");
+                    makeAjaxRequest("clear_cache", btn, resultsDiv);
+                });
                 
-                // Botón para estadísticas de cache
-                $(document).on("click", "#get-cache-stats-btn", function() {
+                // Botón para estadísticas de cache (ambos paneles)
+                $(document).on("click", "#get-cache-stats-btn, #sidebar-get-cache-stats-btn", function() {
                     var btn = $(this);
                     // Buscar un contenedor de resultados apropiado cercano
                     var container = btn.closest("#cosas-amazon-cache-container, .cosas-amazon-config-page, .wrap, body");
                     var resultsDiv = container.find("#cache-results");
                     if (!resultsDiv.length) {
-                        resultsDiv = container.find("#cache-action-results");
+                        resultsDiv = container.find("#cache-action-results, #sidebar-cache-action-results");
                     }
                     if (!resultsDiv.length) {
                         // Fallback global por si acaso
-                        resultsDiv = $("#cache-results, #cache-action-results").first();
+                        resultsDiv = $("#cache-results, #cache-action-results, #sidebar-cache-action-results").first();
                     }
                     if (!resultsDiv.length) {
                         // Último recurso: crear un contenedor bajo el botón
-                        resultsDiv = $("<div id=\"cache-results\" style=\"margin-top:10px;\"></div>");
+                        resultsDiv = $("<div id=\\"cache-results\\" style=\\"margin-top:10px;\\"></div>");
                         btn.after(resultsDiv);
                     }
                     // Usar callback para colocar directamente el HTML devuelto
@@ -705,159 +812,61 @@ class CosasAmazonAdmin {
                         resultsDiv.html(response.data);
                     });
                 });
-                
+
                 // Botón para forzar actualización
                 $(document).on("click", "#force-update-btn", function() {
-                    if (!confirm("¿Estás seguro de que quieres forzar la actualización de todos los productos?")) {
-                        return;
-                    }
-                    
                     var btn = $(this);
-                    var resultsDiv = $("#cache-action-results");
+                    var resultsDiv = btn.closest(".wrap, .cosas-amazon-config-page, body").find("#cache-action-results");
+                    if (!resultsDiv.length) { resultsDiv = $("#cache-action-results"); }
                     
                     makeAjaxRequest("cosas_amazon_force_update", btn, resultsDiv, function(response) {
-                        resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + response.data.message + " (Productos actualizados: " + response.data.count + ")</p></div>");
-                    });
-                });
-                
-                // Botón para ejecutar tests
-                $(document).on("click", "#run-tests-btn", function() {
-                    var btn = $(this);
-                    var resultsDiv = $("#tests-results");
-                    
-                    makeAjaxRequest("cosas_amazon_debug", btn, resultsDiv, function(response) {
-                        var html = "<div class=\"notice notice-success\"><p>✅ Tests ejecutados correctamente</p></div>";
-                        html += "<div style=\"background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px;\">";
-                        html += "<strong>Información del sistema:</strong><br>";
-                        html += "WordPress: " + response.data.debug_info.wordpress_version + "<br>";
-                        html += "PHP: " + response.data.debug_info.php_version + "<br>";
-                        html += "Plugin: " + response.data.debug_info.plugin_version + "<br>";
-                        html += "Memoria: " + response.data.debug_info.memory_limit + "<br>";
-                        html += "</div>";
-                        resultsDiv.html(html);
-                    });
-                });
-                
-                // Botón para debug AJAX
-                $(document).on("click", "#debug-ajax-btn", function() {
-                    var btn = $(this);
-                    var resultsDiv = $("#tests-results");
-                    
-                    makeAjaxRequest("cosas_amazon_debug", btn, resultsDiv, function(response) {
-                        var html = "<div class=\"notice notice-success\"><p>✅ Debug AJAX funcionando</p></div>";
-                        html += "<pre style=\"background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 12px; max-height: 200px; overflow-y: auto;\">";
-                        html += JSON.stringify(response.data.debug_info, null, 2);
-                        html += "</pre>";
-                        resultsDiv.html(html);
-                    });
-                });
-                
-                // Botón para probar URL
-                $("#test-url-btn").click(function() {
-                    var btn = $(this);
-                    var url = $("#test-amazon-url").val();
-                    var resultsDiv = $("#url-test-results");
-                    
-                    if (!url) {
-                        resultsDiv.html("<div class=\\"notice notice-warning\\"><p>⚠️ Por favor ingresa una URL de Amazon</p></div>");
-                        return;
-                    }
-                    
-                    btn.prop("disabled", true).text("Probando...");
-                    resultsDiv.html("<p>Probando URL con datos reales...</p>");
-                    
-                    // Usar la API real del plugin
-                    fetch(cosas_amazon_admin.site_url + "/wp-json/cda/v1/fetch-product-data", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "X-WP-Nonce": cosas_amazon_admin.nonce
-                        },
-                        body: JSON.stringify({ 
-                            url: url,
-                            force_refresh: true  // Forzar obtener datos frescos
-                        })
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            return response.text().then(text => {
-                                throw new Error("HTTP " + response.status + ": " + text);
-                            });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.success && data.data) {
-                            var product = data.data;
-                            var html = "<div class=\\"notice notice-success\\"><p>✅ Producto obtenido exitosamente</p></div>";
-                            html += "<div style=\\"background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px; border-left: 4px solid #46b450;\\">";
-                            html += "<h4 style=\\"margin-top: 0;\\">" + (product.title || "Sin título") + "</h4>";
-                            if (product.image) {
-                                html += "<img src=\\"" + product.image + "\\" style=\\"max-width: 100px; height: auto; float: left; margin-right: 15px;\\" />";
-                            }
-                            html += "<p><strong>Precio:</strong> " + (product.price || "No disponible") + "</p>";
-                            if (product.discount_percentage && product.discount_percentage > 0) {
-                                html += "<p><strong>Descuento:</strong> " + product.discount_percentage + "%</p>";
-                            }
-                            html += "<p><strong>Descripción:</strong> " + (product.description ? product.description.substring(0, 200) + "..." : "No disponible") + "</p>";
-                            html += "<p><strong>ASIN:</strong> " + (product.asin || "No detectado") + "</p>";
-                            html += "<p><strong>URL original:</strong> " + url + "</p>";
-                            html += "<div style=\\"clear: both;\\"></div>";
-                            html += "</div>";
-                            resultsDiv.html(html);
+                        if (response.success && response.data && response.data.summary_html) {
+                            resultsDiv.html(response.data.summary_html);
+                            startStatusPolling(resultsDiv);
                         } else {
-                            var errorMsg = data.data ? data.data : "Error al obtener datos del producto";
-                            resultsDiv.html("<div class=\\"notice notice-error\\"><p>❌ " + errorMsg + "</p></div>");
+                            resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + (response.data || "Actualización encolada") + "</p></div>");
+                            startStatusPolling(resultsDiv);
                         }
-                    })
-                    .catch(error => {
-                        resultsDiv.html("<div style=\\"color: red;\\"><strong>❌ Error:</strong><br>" + error.message + "</div>");
-                    })
-                    .finally(() => {
-                        btn.prop("disabled", false).text("Probar URL");
                     });
                 });
-                
-                // Validación en tiempo real para límite de descripción
-                $("input[name=\\"cosas_amazon_description_length\\"").on("input", function() {
-                    var value = parseInt($(this).val());
-                    var example = $(this).closest("td").find("p:last");
-                    
-                    if (value && value >= 50 && value <= 500) {
-                        var exampleText = "Con un límite de " + value + " caracteres, una descripción típica se vería así: \\"Smartphone última generación con cámara de 48MP, pantalla de 6.1 pulgadas y batería de larga duración...\\"";
-                        example.text(exampleText.substring(0, value + 50));
-                    }
+
+                // Botón para actualizar estado manualmente
+                $(document).on("click", "#refresh-status-btn", function() {
+                    var resultsDiv = $(this).closest(".wrap, .cosas-amazon-config-page, body").find("#cache-action-results");
+                    if (!resultsDiv.length) { resultsDiv = $("#cache-action-results"); }
+                    fetchUpdateStatus(resultsDiv);
                 });
-                
-                // Mostrar/ocultar opciones basadas en configuración
-                $("#enable_auto_updates").change(function() {
-                    var updateFrequencyRow = $(this).closest("tbody").find("tr").has("select[name*=\\"update_frequency\\"]");
-                    var thresholdRow = $(this).closest("tbody").find("tr").has("input[name*=\\"high_discount_threshold\\"]");
-                    
-                    if ($(this).is(":checked")) {
-                        updateFrequencyRow.show();
-                        thresholdRow.show();
-                    } else {
-                        updateFrequencyRow.hide();
-                        thresholdRow.hide();
-                    }
-                }).trigger("change");
-                
-                // Validación de colores
-                $("input[type=\\"color\\"").change(function() {
-                    var color = $(this).val();
-                    var preview = $(this).next(".color-preview");
-                    
-                    if (preview.length === 0) {
-                        preview = $("<span class=\\"color-preview\\" style=\\"display: inline-block; width: 20px; height: 20px; border-radius: 3px; margin-left: 5px; vertical-align: middle; border: 1px solid #ccc;\\"></span>");
-                        $(this).after(preview);
-                    }
-                    
-                    preview.css("background-color", color);
-                });
-                
-                // Activar previsualización de colores al cargar
-                $("input[type=\\"color\\"").trigger("change");
+
+                var pollingTimer = null;
+                function startStatusPolling(resultsDiv) {
+                    if (pollingTimer) clearInterval(pollingTimer);
+                    // Primer fetch inmediato
+                    fetchUpdateStatus(resultsDiv);
+                    // Polling cada 5s
+                    pollingTimer = setInterval(function(){
+                        fetchUpdateStatus(resultsDiv, function(r){
+                            if (r && r.data && r.data.in_queue === false && r.data.running === false) {
+                                clearInterval(pollingTimer);
+                                pollingTimer = null;
+                            }
+                        });
+                    }, 5000);
+                }
+
+                function fetchUpdateStatus(resultsDiv, cb) {
+                    $.ajax({
+                        url: cosas_amazon_admin.ajax_url,
+                        type: "POST",
+                        data: { action: "cosas_amazon_update_status", nonce: cosas_amazon_admin.nonce },
+                        success: function(response){
+                            if (response && response.success && response.data && response.data.summary_html) {
+                                resultsDiv.html(response.data.summary_html);
+                            }
+                            if (cb) cb(response);
+                        },
+                        error: function(){ if (cb) cb(null); }
+                    });
+                }
             });
         ');
     }
@@ -1021,6 +1030,14 @@ class CosasAmazonAdmin {
             'amazon_region',
             'Región',
             array($this, 'amazon_region_callback'),
+            'cosas_amazon_settings',
+            'cosas_amazon_paapi'
+        );
+
+        add_settings_field(
+            'force_region_from_url',
+            'Forzar región según URL',
+            array($this, 'force_region_from_url_callback'),
             'cosas_amazon_settings',
             'cosas_amazon_paapi'
         );
@@ -1199,20 +1216,7 @@ class CosasAmazonAdmin {
             'cosas_amazon_validation'
         );
 
-        // Sección simplificada de utilidades (sin enlaces externos de diagnóstico)
-        add_settings_section(
-            'cosas_amazon_tools',
-            'Herramientas',
-            array($this, 'tools_section_callback'),
-            'cosas_amazon_settings'
-        );
-        add_settings_field(
-            'clear_cache',
-            'Limpiar Cache',
-            array($this, 'clear_cache_callback'),
-            'cosas_amazon_settings',
-            'cosas_amazon_tools'
-        );
+        // Se elimina la sección simplificada de utilidades para evitar duplicados.
         
         add_settings_section(
             'cosas_amazon_styles',
@@ -1307,13 +1311,25 @@ class CosasAmazonAdmin {
         echo '<p>Configura cómo y cuándo se actualizarán automáticamente los precios de los productos.</p>';
     }
 
-    public function tools_section_callback() {
-        echo '<p>Utilidades básicas del plugin. Desde aquí puedes limpiar la caché si notas datos desactualizados.</p>';
-    }
+    // Eliminado: sección de utilidades básica para evitar duplicar acciones de caché
 
     // Funciones callback para la sección de cache
     public function cache_tools_section_callback() {
         echo '<p>Administra el cache de productos de Amazon y supervisa el estado del sistema.</p>';
+        // Mostrar última ejecución del refresco masivo si existe
+        $last = get_option('cosas_amazon_last_update');
+        if (is_array($last) && !empty($last)) {
+            $summary = sprintf(
+                'Última actualización: %s • Procesadas: %d • Éxitos: %d • Errores: %d • Tiempo: %ss',
+                esc_html($last['finished_at'] ?? ($last['started_at'] ?? 'N/D')),
+                intval($last['total_urls'] ?? 0),
+                intval($last['success'] ?? 0),
+                intval($last['errors'] ?? 0),
+                esc_html($last['duration_sec'] ?? '0')
+            );
+            echo '<div style="background:#e8f5e9;border-left:4px solid #46b450;padding:10px;border-radius:4px;margin:10px 0;">'
+                . '<strong>Estado de la última actualización:</strong><br>' . $summary . '</div>';
+        }
         echo '<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0;">';
         echo '<h4>⚠️ Importante:</h4>';
         echo '<p>El cache mejora el rendimiento del sitio web almacenando temporalmente los datos de los productos. Limpia el cache solo si experimentas problemas con datos obsoletos.</p>';
@@ -1333,6 +1349,7 @@ class CosasAmazonAdmin {
         echo '<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">';
         echo '<button type="button" id="clear-cache-btn" class="button button-secondary">🗑️ Limpiar Cache</button>';
         echo '<button type="button" id="force-update-btn" class="button button-primary">🔄 Forzar Actualización</button>';
+        echo '<button type="button" id="refresh-status-btn" class="button">🔁 Actualizar estado</button>';
         echo '</div>';
         echo '<div id="cache-action-results" style="margin-top: 10px;"></div>';
         echo '</div>';
@@ -1501,14 +1518,7 @@ class CosasAmazonAdmin {
     
     // Eliminado: probador de URL integrado (no se publicará)
     
-    public function clear_cache_callback() {
-        echo '<div id="cosas-amazon-cache-container">';
-        echo '<button type="button" id="clear-cache-btn" class="button button-secondary">🗑️ Limpiar Todo el Cache</button>';
-        echo '<button type="button" id="get-cache-stats-btn" class="button button-secondary" style="margin-left: 10px;">📊 Ver Estadísticas</button>';
-        echo '<button type="button" id="force-update-btn" class="button button-primary" style="margin-left: 10px;">🔄 Forzar Actualización</button>';
-        echo '<div id="cache-action-results" style="margin-top: 15px;"></div>';
-        echo '</div>';
-    }
+    // Eliminado: callback duplicado de acciones de caché (se mantiene la sección "Herramientas de Cache y Estado")
     
     public function styles_section_callback() {
         echo '<p>Personaliza la apariencia visual de los productos de Amazon. Los cambios se aplicarán a todos los bloques del plugin.</p>';
@@ -1586,7 +1596,7 @@ class CosasAmazonAdmin {
         
         echo '<div>';
         echo '<label for="text_size"><strong>Tamaño del Texto:</strong></label><br>';
-        echo '<input type="number" id="text_size" name="cosas_amazon_options[text_size]" value="' . esc_attr($text_size) . '" min="10" max="24" step="1" />';
+               echo '<input type="number" id="text_size" name="cosas_amazon_options[text_size]" value="' . esc_attr($text_size) . '" min="10" max="24" step="1" />';
         echo '<span> px</span>';
         echo '</div>';
         
@@ -1646,6 +1656,8 @@ class CosasAmazonAdmin {
         $shadow_style = isset($options['shadow_style']) ? $options['shadow_style'] : 'medium';
         $animation_speed = isset($options['animation_speed']) ? $options['animation_speed'] : 'normal';
         $gradient_enable = isset($options['gradient_enable']) ? $options['gradient_enable'] : false;
+        $gradient_start = isset($options['gradient_start']) ? $options['gradient_start'] : '#667eea';
+        $gradient_end   = isset($options['gradient_end']) ? $options['gradient_end'] : '#764ba2';
         
         echo '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">';
         
@@ -1682,6 +1694,26 @@ class CosasAmazonAdmin {
         echo '<label for="gradient_enable"><strong>Gradientes:</strong></label><br>';
         echo '<input type="checkbox" id="gradient_enable" name="cosas_amazon_options[gradient_enable]" value="1"' . checked($gradient_enable, 1, false) . ' />';
         echo '<label for="gradient_enable">Activar efectos de gradiente</label>';
+        echo '</div>';
+        
+        // Colores del gradiente (visibles solo si está activado)
+        $display = $gradient_enable ? 'block' : 'none';
+        echo '<div id="gradient_colors_wrap" style="margin-top:10px; display:' . $display . ';">';
+        echo '  <div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">';
+        echo '    <div>';
+        echo '      <label for="gradient_start"><strong>Color inicio:</strong></label><br>';
+        echo '      <input type="color" id="gradient_start" name="cosas_amazon_options[gradient_start]" value="' . esc_attr($gradient_start) . '" />';
+        echo '    </div>';
+        echo '    <div>';
+        echo '      <label for="gradient_end"><strong>Color fin:</strong></label><br>';
+        echo '      <input type="color" id="gradient_end" name="cosas_amazon_options[gradient_end]" value="' . esc_attr($gradient_end) . '" />';
+        echo '    </div>';
+        echo '    <div style="min-width:160px;">';
+        echo '      <label><strong>Previsualización:</strong></label><br>';
+        echo '      <div id="gradient_preview_box" style="width:160px;height:28px;border-radius:4px;border:1px solid #ddd;background:linear-gradient(90deg, ' . esc_attr($gradient_start) . ', ' . esc_attr($gradient_end) . ');"></div>';
+        echo '    </div>';
+        echo '  </div>';
+        echo '  <p class="description">Estos colores controlan la superposición de gradiente sobre las imágenes cuando el efecto está activado.</p>';
         echo '</div>';
         
         echo '</div>';
@@ -1779,7 +1811,7 @@ class CosasAmazonAdmin {
         
         echo '<div style="margin-top: 15px; padding: 15px; background: #e8f4fd; border: 1px solid #bee5eb; border-radius: 6px;">';
         echo '<h4 style="margin-top: 0; color: #0c5460;">💡 Consejos para CSS Personalizado</h4>';
-        echo '<ul style="margin: 10px 0; padding-left: 20px; color: #0c5460;">';
+        echo '<ul style="margin: 10px 0; padding-left: 20px; color: #0c5460; font-size: 13px; line-height: 1.6;">';
         echo '<li><strong>Usa !important</strong> para asegurar que tus estilos tengan prioridad</li>';
         echo '<li><strong>Clases principales:</strong> .cosas-amazon-product, .cosas-amazon-title, .cosas-amazon-price, .cosas-amazon-btn</li>';
         echo '<li><strong>Estilos específicos:</strong> .cosas-amazon-horizontal, .cosas-amazon-vertical, .cosas-amazon-minimal</li>';
@@ -1918,10 +1950,10 @@ class CosasAmazonAdmin {
                         <h4 style="margin: 0 0 15px 0; color: #0073aa; font-size: 16px;">🧰 Mantenimiento</h4>
                         <p style="margin: 0 0 15px 0; font-size: 13px; color: #666;">Acciones rápidas de mantenimiento del plugin.</p>
                         <div style="display: flex; gap: 10px;">
-                            <button type="button" id="clear-cache-btn" class="button button-secondary">🗑️ Limpiar Cache</button>
-                            <button type="button" id="get-cache-stats-btn" class="button button-secondary">📊 Ver Estadísticas</button>
+                            <button type="button" id="sidebar-clear-cache-btn" class="button button-secondary">🗑️ Limpiar Cache</button>
+                            <button type="button" id="sidebar-get-cache-stats-btn" class="button button-secondary">📊 Ver Estadísticas</button>
                         </div>
-                        <div id="cache-action-results" style="margin-top: 15px;"></div>
+                        <div id="sidebar-cache-action-results" style="margin-top: 15px;"></div>
                     </div>
                 </div>
             </div>
@@ -1942,15 +1974,88 @@ class CosasAmazonAdmin {
             wp_send_json_error('Permisos insuficientes');
             return;
         }
-        
-        // Simular actualización forzada
-        $updated_count = rand(5, 25);
-        
+        // Encolar actualización en background para evitar timeouts de conexión
+        if (!class_exists('CosasDeAmazon')) {
+            require_once dirname(__FILE__) . '/../core/class-cosas-de-amazon.php';
+        }
+
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 0; // 0 = todos
+        $sleep = isset($_POST['sleep']) ? intval($_POST['sleep']) : 0;
+
+        // Evitar duplicados si ya hay una ejecución pendiente
+        $scheduled = wp_next_scheduled('cosas_amazon_force_price_update');
+        if ($scheduled) {
+            $when = date_i18n('Y-m-d H:i:s', $scheduled);
+            $summary_html = '<div class="notice notice-info"><p>⏳ Ya hay una actualización en cola. Próxima ejecución: ' . esc_html($when) . '</p></div>';
+            wp_send_json_success([
+                'message' => 'Actualización ya programada',
+                'scheduled' => $when,
+                'summary_html' => $summary_html,
+            ]);
+        }
+
+        // Programar ejecución inmediata (cron) con argumentos
+        wp_schedule_single_event(time() + 1, 'cosas_amazon_force_price_update', array(array(
+            'limit' => max(0, $limit),
+            'sleep' => max(0, $sleep)
+        )));
+
+        error_log('[COSAS_AMAZON_DEBUG] 🔄 Actualización de precios encolada (limit=' . $limit . ', sleep=' . $sleep . ')');
+
+        $summary_html = '<div class="notice notice-success"><p>✅ Actualización encolada: se ejecutará en background y actualizará todos los productos detectados.</p><p>Este panel mostrará los resultados cuando finalice.</p></div>';
         wp_send_json_success([
-            'message' => 'Actualización iniciada correctamente',
-            'count' => $updated_count,
+            'message' => 'Actualización encolada',
+            'queued' => true,
+            'summary_html' => $summary_html,
             'timestamp' => current_time('mysql')
         ]);
+    }
+
+    // Estado de actualización en background
+    public function ajax_update_status() {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
+            wp_send_json_error('Error de seguridad');
+            return;
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permisos insuficientes');
+            return;
+        }
+
+        $last = get_option('cosas_amazon_last_update');
+        $next = wp_next_scheduled('cosas_amazon_force_price_update');
+        $in_queue = $next ? true : false;
+        $running = false; // No tracking granular; opcionalmente se podría marcar con una opción temporal
+
+        $summary = '';
+        if (is_array($last) && !empty($last)) {
+            $summary = sprintf(
+                'Última: %s • URLs: %d • Éxitos: %d • Errores: %d • Tiempo: %ss',
+                esc_html($last['finished_at'] ?? ($last['started_at'] ?? 'N/D')),
+                intval($last['total_urls'] ?? 0),
+                intval($last['success'] ?? 0),
+                intval($last['errors'] ?? 0),
+                esc_html($last['duration_sec'] ?? '0')
+            );
+        } else {
+            $summary = 'Aún no hay ejecuciones registradas.';
+        }
+
+        $status_html = '<div class="notice ' . ($in_queue ? 'notice-info' : 'notice-success') . '"><p>';
+        if ($in_queue) {
+            $status_html .= '⏳ Actualización en cola. Próxima ejecución: ' . esc_html(date_i18n('d/m/Y H:i:s', $next));
+        } else {
+            $status_html .= '✅ Sin tareas en cola. ' . esc_html($summary);
+        }
+        $status_html .= '</p></div>';
+
+        wp_send_json_success(array(
+            'in_queue' => $in_queue,
+            'running' => $running,
+            'last' => $last,
+            'next' => $next,
+            'summary_html' => $status_html,
+        ));
     }
     
     public function ajax_debug() {
@@ -2273,6 +2378,16 @@ class CosasAmazonAdmin {
         echo ' Habilitar Amazon PA API';
         echo '</label>';
         echo '<p class="description">Activar para usar la API oficial de Amazon en lugar de scraping web.</p>';
+    }
+
+    public function force_region_from_url_callback() {
+        $options = get_option('cosas_amazon_api_options', array());
+        $value = isset($options['force_region_from_url']) ? $options['force_region_from_url'] : 0;
+        echo '<label>';
+        echo '<input type="checkbox" name="cosas_amazon_api_options[force_region_from_url]" value="1"' . checked($value, 1, false) . '>';
+        echo ' Forzar que la PA-API use la región del dominio de la URL (amazon.es, .fr, .it, etc.)';
+        echo '</label>';
+        echo '<p class="description">Cuando está activado, si pegas una URL de amazon.es se consultará la PA-API en ES, si es amazon.fr en FR, etc. Evita errores por cruces de marketplace. Si está desactivado, se usará la región seleccionada arriba con posibles reintentos.</p>';
     }
     
     public function amazon_access_key_callback() {

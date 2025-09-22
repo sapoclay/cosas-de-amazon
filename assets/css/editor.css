@@ -25,7 +25,7 @@
 }
 
 /* Contenedor principal del producto EN EL EDITOR */
-.editor-styles-wrapper .cosas-amaz/* Precios */
+/* Precios */
 .editor-styles-wrapper .cosas-amazon-featured .cosas-amazon-pricing,
 .block-editor-writing-flow .cosas-amazon-featured .cosas-amazon-pricing {
     display: flex;
@@ -33,7 +33,7 @@
     gap: 15px;
     flex-wrap: wrap;
     justify-content: center;
-    margin: 0 0 10px 0;
+    margin: 0 0 16px 0; /* Paridad con frontend */
 }
 .block-editor-writing-flow .cosas-amazon-product {
     background: #fff;
@@ -61,6 +61,41 @@
     gap: 20px;
 }
 
+/* Paridad: descripción en horizontal muestra hasta 4 líneas (como frontend) */
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Corregir clamp cuando la descripción incluye un <p> interno (paridad con frontend) */
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description p,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description p {
+    margin: 0 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+}
+
+/* Paridad: soporte de listas dentro de la descripción en horizontal */
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description ul,
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description ol,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description ul,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description ol {
+    margin: 0 !important;
+    padding-left: 1em; /* mantener algo de sangría visual */
+    display: -webkit-box !important;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+}
+
 .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-image,
 .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-image {
     flex-shrink: 0;
@@ -70,6 +105,25 @@
 .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-content,
 .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-content {
     flex: 1;
+}
+
+/* Paridad horizontal: tamaños por bloque */
+.editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-image { height: 120px; width: 100px; }
+.editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image { height: 160px; width: 140px; }
+.editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image { height: 200px; width: 180px; }
+.editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image { height: 230px; width: 220px; }
+
+/* Paridad horizontal: img contain */
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-image img,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-image img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    object-position: center center !important;
 }
 
 /* Estilo vertical en el editor */
@@ -91,14 +145,64 @@
     max-width: 200px !important;
 }
 
+/* Descripción en vertical: 4 líneas (desktop) con soporte <p> */
+.editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-description,
+.block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-description p,
+.block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-description p {
+    margin: 0 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+}
+
 /* Títulos en el editor */
 .editor-styles-wrapper .cosas-amazon-title,
 .block-editor-writing-flow .cosas-amazon-title {
     font-size: 18px;
     font-weight: 600;
-    color: #333;
+    color: inherit; /* Paridad con frontend: hereda el color del contenedor */
     margin: 0 0 10px 0;
     line-height: 1.4;
+}
+
+/* Enlaces dentro del título (editor): sin subrayado y heredando color */
+.editor-styles-wrapper .cosas-amazon-title a,
+.block-editor-writing-flow .cosas-amazon-title a {
+    color: inherit;
+    text-decoration: none;
+}
+/* Enlaces de título en tabla (editor): negro y sin subrayado */
+.editor-styles-wrapper .cosas-amazon-table-title h4 a,
+.block-editor-writing-flow .cosas-amazon-table-title h4 a {
+    color: #000;
+    text-decoration: none;
+}
+.editor-styles-wrapper .cosas-amazon-table-title h4 a:hover,
+.editor-styles-wrapper .cosas-amazon-table-title h4 a:focus,
+.editor-styles-wrapper .cosas-amazon-table-title h4 a:active,
+.block-editor-writing-flow .cosas-amazon-table-title h4 a:hover,
+.block-editor-writing-flow .cosas-amazon-table-title h4 a:focus,
+.block-editor-writing-flow .cosas-amazon-table-title h4 a:active {
+    color: #000;
+    text-decoration: none;
+}
+.editor-styles-wrapper .cosas-amazon-title a:hover,
+.editor-styles-wrapper .cosas-amazon-title a:focus,
+.editor-styles-wrapper .cosas-amazon-title a:active,
+.block-editor-writing-flow .cosas-amazon-title a:hover,
+.block-editor-writing-flow .cosas-amazon-title a:focus,
+.block-editor-writing-flow .cosas-amazon-title a:active {
+    color: inherit;
+    text-decoration: none;
 }
 
 /* Precios en el editor */
@@ -307,8 +411,8 @@ body.wp-admin .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-ima
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
-    -webkit-line-clamp: 2; /* Limitar a 2 líneas */
-    line-clamp: 2; /* Propiedad estándar */
+    -webkit-line-clamp: 4; /* Paridad con frontend */
+    line-clamp: 4; /* Paridad con frontend */
     -webkit-box-orient: vertical;
 }
 
@@ -316,6 +420,15 @@ body.wp-admin .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-ima
 .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-price {
     font-size: 16px;
     margin-bottom: 8px;
+}
+
+.editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-pricing,
+.block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-pricing {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    overflow: visible !important;
 }
 
 .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-btn,
@@ -451,14 +564,6 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     margin: 0 !important;
 }
 
-body .block-editor-writing-flow .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-price,
-body .editor-styles-wrapper .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-price,
-body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-price {
-    font-size: 13px !important;
-    font-weight: bold !important;
-    color: #B12704 !important;
-}
-
 body .block-editor-writing-flow .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-special-offer,
 body .editor-styles-wrapper .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-special-offer,
 body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-special-offer {
@@ -482,13 +587,17 @@ body .editor-styles-wrapper .cosas-amazon-multiple-products .cosas-amazon-horizo
 body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-button {
     order: 5 !important;
     margin: 0 !important;
-    margin-top: auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    flex-basis: 100% !important; /* Fuerza nueva línea */
 }
 
 body .block-editor-writing-flow .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-btn,
 body .editor-styles-wrapper .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-btn,
 body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-btn {
-    font-size: 10px !important;
+    font-size: 12px !important;
     padding: 6px 10px !important;
     min-height: 28px !important;
     border-radius: 3px !important;
@@ -501,8 +610,13 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 body .block-editor-writing-flow .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-description,
 body .editor-styles-wrapper .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-description,
 body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-description {
-    display: block !important;
+    display: -webkit-box !important;
     order: 2.5 !important;
+    -webkit-line-clamp: 3 !important;
+    line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 
 /* Imágenes en el editor */
@@ -527,6 +641,31 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
         width: 100%;
         max-width: 200px;
         margin: 0 auto;
+    }
+}
+
+/* En móvil, limitar descripción horizontal a 3 líneas (paridad con frontend) */
+@media (max-width: 480px) {
+    .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description,
+    .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description p,
+    .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description p {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
+    }
+    .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description ul,
+    .editor-styles-wrapper .cosas-amazon-horizontal .cosas-amazon-description ol,
+    .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description ul,
+    .block-editor-writing-flow .cosas-amazon-horizontal .cosas-amazon-description ol {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
     }
 }
 
@@ -634,6 +773,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     visibility: visible !important;
     opacity: 1 !important;
     height: auto !important;
+    flex-wrap: nowrap !important;
 }
 
 .editor-styles-wrapper .cosas-amazon-rating {
@@ -648,6 +788,8 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 .block-editor-writing-flow .cosas-amazon-stars {
     display: flex;
     gap: 2px;
+    align-items: center;
+    line-height: 1; /* Mantener la misma línea que el texto */
 }
 
 .editor-styles-wrapper .cosas-amazon-star,
@@ -656,6 +798,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     height: 16px;
     color: #FFA500;
     font-size: 16px;
+    line-height: 1; /* Evitar salto vertical del glifo de estrella */
 }
 
 .editor-styles-wrapper .cosas-amazon-star.full,
@@ -807,7 +950,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     align-items: center;
     gap: 5px;
     font-size: 12px;
-    order: 2;
+        color: #000;
 }
 
 .editor-styles-wrapper .cosas-amazon-compact .cosas-amazon-pricing,
@@ -826,7 +969,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     padding: 8px 16px;
     font-size: 12px;
     border-radius: 4px;
-    width: 100%;
+    width: auto; /* Paridad con frontend: evitar barra a lo ancho */
     box-sizing: border-box;
     order: 4;
     min-height: 32px;
@@ -919,15 +1062,6 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     background: #f8f9fa !important;
 }
 
-.editor-styles-wrapper .cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-main-content,
-.block-editor-writing-flow .cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-main-content {
-    display: flex !important;
-    gap: 15px !important;
-    flex: 1 !important;
-    order: 2 !important;
-    overflow: visible !important;
-}
-
 .editor-styles-wrapper .cosas-amazon-product.cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-image img,
 .block-editor-writing-flow .cosas-amazon-product.cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-image img {
     max-width: 100% !important;
@@ -978,15 +1112,6 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     align-items: center !important;
     justify-content: center !important;
     background: #f8f9fa !important;
-}
-
-.editor-styles-wrapper .cosas-amazon-compact.cosas-amazon-size-xlarge .cosas-amazon-main-content,
-.block-editor-writing-flow .cosas-amazon-compact.cosas-amazon-size-xlarge .cosas-amazon-main-content {
-    display: flex !important;
-    gap: 15px !important;
-    flex: 1 !important;
-    order: 2 !important;
-    overflow: visible !important;
 }
 
 .editor-styles-wrapper .cosas-amazon-product.cosas-amazon-compact.cosas-amazon-size-xlarge .cosas-amazon-image img,
@@ -1068,9 +1193,10 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 
 .editor-styles-wrapper .cosas-amazon-minimal .cosas-amazon-image img,
 .block-editor-writing-flow .cosas-amazon-minimal .cosas-amazon-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    object-position: center center !important;
     border-radius: 4px;
 }
 
@@ -1093,7 +1219,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 .editor-styles-wrapper .cosas-amazon-minimal .cosas-amazon-price,
 .block-editor-writing-flow .cosas-amazon-minimal .cosas-amazon-price {
     font-size: 19px;
-    color: #B12704;
+        color: #000;
     font-weight: bold;
     margin: 0;
     order: 1;
@@ -1174,7 +1300,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     font-size: 11px;
     padding: 6px 12px;
     margin-top: auto;
-    width: 100%;
+    width: auto; /* Paridad con frontend */
     box-sizing: border-box;
     order: 5;
     border-radius: 4px;
@@ -1285,7 +1411,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     align-items: center;
     box-sizing: border-box;
     overflow: hidden;
-    min-height: 400px;
+    min-height: 460px; /* Paridad con frontend */
     position: relative;
 }
 
@@ -1297,14 +1423,14 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     align-items: center;
     flex-grow: 1;
     width: 100%;
-    padding-bottom: 70px;
+    padding-bottom: 120px; /* Paridad con frontend */
 }
 
 /* Imagen en la parte superior */
 .editor-styles-wrapper .cosas-amazon-featured .cosas-amazon-image,
 .block-editor-writing-flow .cosas-amazon-featured .cosas-amazon-image {
-    width: 180px;
-    height: 180px;
+    width: 190px; /* Paridad con frontend */
+    height: 190px; /* Paridad con frontend */
     margin: 0 auto 15px;
     overflow: hidden;
     border-radius: 8px;
@@ -1348,6 +1474,12 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     line-height: 1.3;
     font-weight: 700;
     text-align: center;
+}
+/* Enlaces del título featured en el editor */
+.editor-styles-wrapper .cosas-amazon-featured .cosas-amazon-title a,
+.block-editor-writing-flow .cosas-amazon-featured .cosas-amazon-title a {
+    color: inherit;
+    text-decoration: none;
 }
 
 /* Rating alineado a la derecha */
@@ -1404,6 +1536,16 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     overflow: hidden;
     text-overflow: ellipsis;
     flex-grow: 1;
+}
+/* Soporte <p> en descripción featured */
+.editor-styles-wrapper .cosas-amazon-featured .cosas-amazon-description p,
+.block-editor-writing-flow .cosas-amazon-featured .cosas-amazon-description p {
+    margin: 0 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
 }
 
 /* Precios */
@@ -1571,11 +1713,48 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 .block-editor-writing-flow .cosas-amazon-featured.cosas-amazon-size-xlarge .cosas-amazon-description {
     font-size: 20px;
     margin: 0 0 30px 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+}
+.editor-styles-wrapper .cosas-amazon-featured.cosas-amazon-size-xlarge .cosas-amazon-description p,
+.block-editor-writing-flow .cosas-amazon-featured.cosas-amazon-size-xlarge .cosas-amazon-description p {
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
 }
 
 .editor-styles-wrapper .cosas-amazon-featured.cosas-amazon-size-xlarge .cosas-amazon-price,
 .block-editor-writing-flow .cosas-amazon-featured.cosas-amazon-size-xlarge .cosas-amazon-price {
     font-size: 40px;
+}
+
+/* En móvil, limitar descripciones: featured 3 líneas, vertical 3 líneas */
+@media (max-width: 480px) {
+    .editor-styles-wrapper .cosas-amazon-featured .cosas-amazon-description,
+    .block-editor-writing-flow .cosas-amazon-featured .cosas-amazon-description {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
+    }
+    .editor-styles-wrapper .cosas-amazon-featured .cosas-amazon-description p,
+    .block-editor-writing-flow .cosas-amazon-featured .cosas-amazon-description p {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
+    }
+    .editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-description,
+    .block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-description {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    .editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-description p,
+    .block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-description p {
+        -webkit-line-clamp: 3 !important;
+        line-clamp: 3 !important;
+    }
 }
 
 .editor-styles-wrapper .cosas-amazon-featured.cosas-amazon-size-xlarge .cosas-amazon-btn,
@@ -1599,6 +1778,81 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     background: #f9f9f9;
 }
 
+/* === Efectos y Animaciones (editor) — sincronizados con frontend === */
+.block-editor-writing-flow .cosas-amazon-product.cda-shadow-none,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-shadow-none,
+.editor-styles-wrapper .cosas-amazon-product.cda-shadow-none,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-shadow-none { box-shadow: none !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-shadow-light,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-shadow-light,
+.editor-styles-wrapper .cosas-amazon-product.cda-shadow-light,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-shadow-light { box-shadow: 0 1px 6px rgba(0,0,0,0.08) !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-shadow-medium,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-shadow-medium,
+.editor-styles-wrapper .cosas-amazon-product.cda-shadow-medium,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-shadow-medium { box-shadow: 0 4px 14px rgba(0,0,0,0.12) !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-shadow-strong,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-shadow-strong,
+.editor-styles-wrapper .cosas-amazon-product.cda-shadow-strong,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-shadow-strong { box-shadow: 0 8px 24px rgba(0,0,0,0.18) !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-anim-slow,
+
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-anim-slow,
+.editor-styles-wrapper .cosas-amazon-product.cda-anim-slow,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-anim-slow { transition: all 300ms ease !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-anim-normal,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-anim-normal,
+.editor-styles-wrapper .cosas-amazon-product.cda-anim-normal,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-anim-normal { transition: all 200ms ease !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-anim-fast,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-anim-fast,
+.editor-styles-wrapper .cosas-amazon-product.cda-anim-fast,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-anim-fast { transition: all 120ms ease !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-hover-none:hover,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-hover-none:hover,
+.editor-styles-wrapper .cosas-amazon-product.cda-hover-none:hover,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-hover-none:hover { transform: none !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-hover-scale:hover,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-hover-scale:hover,
+.editor-styles-wrapper .cosas-amazon-product.cda-hover-scale:hover,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-hover-scale:hover { transform: translateZ(0) scale(1.02) !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-hover-lift:hover,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-hover-lift:hover,
+.editor-styles-wrapper .cosas-amazon-product.cda-hover-lift:hover,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-hover-lift:hover { transform: translateY(-4px) !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-hover-glow:hover,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-hover-glow:hover,
+.editor-styles-wrapper .cosas-amazon-product.cda-hover-glow:hover,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-hover-glow:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.22), 0 0 0 2px rgba(255,255,255,0.4) inset !important; }
+
+.block-editor-writing-flow .cosas-amazon-product.cda-gradient-on .cosas-amazon-image,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-gradient-on .cosas-amazon-image,
+.editor-styles-wrapper .cosas-amazon-product.cda-gradient-on .cosas-amazon-image,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-gradient-on .cosas-amazon-image {
+    position: relative;
+}
+.block-editor-writing-flow .cosas-amazon-product.cda-gradient-on .cosas-amazon-image::after,
+.block-editor-writing-flow .cosas-amazon-carousel-item.cda-gradient-on .cosas-amazon-image::after,
+.editor-styles-wrapper .cosas-amazon-product.cda-gradient-on .cosas-amazon-image::after,
+.editor-styles-wrapper .cosas-amazon-carousel-item.cda-gradient-on .cosas-amazon-image::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    --cda-grad-start: rgba(0,0,0,0.0);
+    --cda-grad-end: rgba(0,0,0,0.10);
+    background: linear-gradient(180deg, var(--cda-grad-start), var(--cda-grad-end));
+}
 .editor-styles-wrapper .cosas-amazon-carousel-item,
 .block-editor-writing-flow .cosas-amazon-carousel-item {
     flex: 0 0 auto;
@@ -1631,9 +1885,10 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 
 .editor-styles-wrapper .cosas-amazon-carousel-item .cosas-amazon-image img,
 .block-editor-writing-flow .cosas-amazon-carousel-item .cosas-amazon-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    background: #f8f9fa;
 }
 
 /* Contenido estructurado */
@@ -1689,8 +1944,8 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 .editor-styles-wrapper .cosas-amazon-carousel-item .cosas-amazon-description,
 .block-editor-writing-flow .cosas-amazon-carousel-item .cosas-amazon-description {
     display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1717,17 +1972,11 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 .block-editor-writing-flow .cosas-amazon-carousel-item .cosas-amazon-rating .cosas-amazon-stars {
     display: flex;
     gap: 1px;
+    margin-bottom: 2px;
 }
 
-.editor-styles-wrapper .cosas-amazon-carousel-item .cosas-amazon-rating .cosas-amazon-star,
-.block-editor-writing-flow .cosas-amazon-carousel-item .cosas-amazon-rating .cosas-amazon-star {
-    font-size: 12px;
-    width: 12px;
-    height: 12px;
-}
-
-.editor-styles-wrapper .cosas-amazon-carousel-item .cosas-amazon-rating-number,
-.block-editor-writing-flow .cosas-amazon-carousel-item .cosas-amazon-rating-number {
+.editor-styles-wrapper .cosas-amazon-carousel-item .cosas-amazon-rating .cosas-amazon-rating-number,
+.block-editor-writing-flow .cosas-amazon-carousel-item .cosas-amazon-rating .cosas-amazon-rating-number {
     font-size: 12px;
     font-weight: 600;
     color: #333;
@@ -1783,7 +2032,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     font-size: 12px;
     border-radius: 4px;
     text-align: center;
-    width: 100%;
+    width: auto; /* Paridad con frontend */
     box-sizing: border-box;
     order: 8;
     min-height: 32px;
@@ -2172,16 +2421,6 @@ body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-am
     min-width: 0 !important;
 }
 
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-special-offer span,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-special-offer span,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-small .cosas-amazon-content .cosas-amazon-special-offer span {
-    font-size: 10px !important;
-    padding: 3px 6px !important;
-    display: block !important;
-    width: fit-content !important;
-    margin: 0 auto !important;
-}
-
 /* COMBINACIÓN HORIZONTAL + MEDIUM EN EL EDITOR */
 body.wp-admin .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-medium,
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium,
@@ -2202,7 +2441,7 @@ div[data-type="cosas-de-amazon/amazon-product"] .cosas-amazon-horizontal.cosas-a
 }
 
 body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image,
-.editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image,
+body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image,
 .wp-block-cosas-de-amazon-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image,
 body.wp-admin .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-image {
     order: 1 !important;
@@ -2267,7 +2506,7 @@ body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium .c
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-special-offer {
     order: 4 !important;
     width: auto !important;
-    margin: 8px 0 !important;
+    margin: 12px 0 !important;
     text-align: left !important;
     flex-shrink: 0 !important;
     align-self: flex-start !important;
@@ -2291,17 +2530,22 @@ body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-a
 body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-button,
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-button,
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-button {
-    order: 5 !important;
+    order: 10 !important; /* Order alto para nueva línea */
     margin: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    flex-basis: 100% !important; /* Fuerza nueva línea */
 }
 
 body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-btn,
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-btn,
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-medium .cosas-amazon-content .cosas-amazon-btn {
-    font-size: 14px !important;
-    padding: 10px 16px !important;
-    min-height: 40px !important;
-    border-radius: 5px !important;
+    font-size: 20px !important;
+    padding: 18px 30px !important;
+    min-height: 58px !important;
+    border-radius: 8px !important;
     width: 100% !important;
     box-sizing: border-box !important;
 }
@@ -2333,7 +2577,7 @@ div[data-type="cosas-de-amazon/amazon-product"] .cosas-amazon-horizontal.cosas-a
 }
 
 body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image,
-.editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image,
+body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image,
 .wp-block-cosas-de-amazon-amazon-product.cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image,
 body.wp-admin .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-image {
     order: 2 !important; /* IMAGEN A LA DERECHA para large */
@@ -2384,12 +2628,11 @@ body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-am
     font-size: 14px !important;
     line-height: 1.4 !important;
     margin: 0 !important;
-    max-height: 2.8em !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    line-clamp: 2 !important;
+    -webkit-line-clamp: 4 !important;
+    line-clamp: 4 !important;
     -webkit-box-orient: vertical !important;
     color: #666 !important;
 }
@@ -2398,7 +2641,7 @@ body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-rating,
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-rating {
     order: 2 !important;
-    font-size: 14px !important;
+    font-size: 16px !important;
     margin: 0 !important;
 }
 
@@ -2406,7 +2649,7 @@ body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-pricing,
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-pricing {
     order: 3 !important;
-    font-size: 17px !important;
+    font-size: 20px !important;
     margin: 0 !important;
 }
 
@@ -2415,7 +2658,7 @@ body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .co
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-special-offer {
     order: 4 !important;
     width: auto !important;
-    margin: 10px 0 !important;
+    margin: 12px 0 !important;
     text-align: left !important;
     flex-shrink: 0 !important;
     align-self: flex-start !important;
@@ -2429,8 +2672,8 @@ body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-am
 body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-special-offer span,
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-special-offer span,
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-special-offer span {
-    font-size: 12px !important;
-    padding: 5px 10px !important;
+    font-size: 14px !important;
+    padding: 6px 12px !important;
     display: block !important;
     width: fit-content !important;
     margin: 0 auto !important;
@@ -2451,149 +2694,28 @@ body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-am
 body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-btn,
 body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-btn,
 body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-btn {
-    font-size: 16px !important;
-    padding: 12px 20px !important;
-    min-height: 48px !important;
-    border-radius: 6px !important;
-    width: auto !important; /* Cambiar de 100% a auto para centrar mejor */
-    box-sizing: border-box !important;
-    text-align: center !important;
-    min-width: 140px !important;
-    flex-shrink: 0 !important;
-}
-
-/* COMBINACIÓN HORIZONTAL + XLARGE EN EL EDITOR */
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: flex-start !important;
-    gap: 30px !important;
-    max-width: 850px !important;
-    min-width: 600px !important;
-    width: fit-content !important;
-    padding: 30px !important;
-    margin: 30px 0 !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-image {
-    order: 1 !important;
-    display: block !important;
-    width: 220px !important;
-    min-width: 220px !important;
-    flex-shrink: 0 !important;
-    flex-basis: 220px !important;
-    max-width: 220px !important;
-}
-
-/* CONTENEDOR DE CONTENIDO PARA HORIZONTAL + XLARGE */
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content {
-    order: 2 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    gap: 15px !important;
-    justify-content: flex-start !important;
-    align-items: flex-start !important;
-    width: auto !important;
-    min-width: 0 !important;
-}
-
-/* ELEMENTOS DENTRO DEL CONTENIDO PARA HORIZONTAL + XLARGE */
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-title,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-title,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-title {
-    order: 1 !important;
-    font-size: 22px !important;
-    line-height: 1.3 !important;
-    margin: 0 !important;
-    max-height: 2.6em !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-description,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-description,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-description {
-    order: 1.5 !important;
-    font-size: 16px !important;
-    line-height: 1.5 !important;
-    margin: 0 !important;
-    max-height: 4.5em !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 3 !important;
-    line-clamp: 3 !important;
-    -webkit-box-orient: vertical !important;
-    color: #666 !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-rating,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-rating,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-rating {
-    order: 2 !important;
-    font-size: 16px !important;
-    margin: 0 !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-pricing,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-pricing,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-pricing {
-    order: 3 !important;
     font-size: 20px !important;
-    margin: 0 !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-special-offer,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-special-offer,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-special-offer {
-    order: 4 !important;
-    width: auto !important;
-    margin: 12px 0 !important;
-    text-align: left !important;
-    flex-shrink: 0 !important;
-    align-self: flex-start !important;
-    position: static !important;
-    flex-basis: auto !important;
-    flex-grow: 0 !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-special-offer span,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-special-offer span,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-special-offer span {
-    font-size: 14px !important;
-    padding: 6px 12px !important;
-    display: block !important;
-    width: fit-content !important;
-    margin: 0 auto !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-button,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-button,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-button {
-    order: 5 !important;
-    margin: 0 !important;
-}
-
-body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-btn,
-body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-btn,
-body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-xlarge .cosas-amazon-content .cosas-amazon-btn {
-    font-size: 20px !important; /* Sincronizar con frontend: 18px → 20px */
-    padding: 18px 30px !important; /* Sincronizar con frontend: 15px 25px → 18px 30px */
-    min-height: 58px !important; /* Sincronizar con frontend: 54px → 58px */
+    padding: 18px 30px !important;
+    min-height: 58px !important;
     border-radius: 8px !important;
     width: 100% !important;
     box-sizing: border-box !important;
+}
+
+/* Ocultar descripción en horizontal large editor */
+body .block-editor-writing-flow .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-description,
+body .editor-styles-wrapper .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-description,
+body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-amazon-content .cosas-amazon-description {
+    display: none !important;
+}
+
+/* Específico para carousel xlarge en el editor */
+.editor-styles-wrapper .cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item .cosas-amazon-description,
+.block-editor-writing-flow .cosas-amazon-carousel.cosas-amazon-size-xlarge .cosas-amazon-carousel-item .cosas-amazon-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

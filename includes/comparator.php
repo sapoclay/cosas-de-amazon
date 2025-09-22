@@ -133,9 +133,11 @@ class CosasAmazonComparator {
         $html .= '<tr><td class="feature-name">Precio</td>';
         foreach ($products as $product) {
             $html .= '<td class="price-cell">';
-            $html .= '<span class="current-price">' . esc_html($product['price']) . '</span>';
+            $cur = isset($product['price']) ? CosasAmazonHelpers::normalize_price_display($product['price']) : '';
+            $html .= '<span class="current-price">' . esc_html($cur) . '</span>';
             if (!empty($product['originalPrice']) && $product['originalPrice'] !== $product['price']) {
-                $html .= '<span class="original-price">' . esc_html($product['originalPrice']) . '</span>';
+                $orig = CosasAmazonHelpers::normalize_price_display($product['originalPrice']);
+                $html .= '<span class="original-price">' . esc_html($orig) . '</span>';
             }
             $html .= '</td>';
         }
@@ -213,9 +215,11 @@ class CosasAmazonComparator {
             if (!empty($product['discount']) && $product['discount'] > 0) {
                 $html .= '<span class="discount-badge">-' . esc_html($product['discount']) . '%</span>';
             }
-            $html .= '<span class="current-price">' . esc_html($product['price']) . '</span>';
+            $cur = isset($product['price']) ? CosasAmazonHelpers::normalize_price_display($product['price']) : '';
+            $html .= '<span class="current-price">' . esc_html($cur) . '</span>';
             if (!empty($product['originalPrice']) && $product['originalPrice'] !== $product['price']) {
-                $html .= '<span class="original-price">' . esc_html($product['originalPrice']) . '</span>';
+                $orig = CosasAmazonHelpers::normalize_price_display($product['originalPrice']);
+                $html .= '<span class="original-price">' . esc_html($orig) . '</span>';
             }
             $html .= '</div>';
             

@@ -105,13 +105,107 @@
         return s;
     }
 
+    // Extrae valor numérico de un string de precio con manejo de separadores
+    function extractNumericPriceJS(input) {
+        if (input === undefined || input === null) return null;
+        let s = String(input);
+        s = normalizePriceStringJS(s);
+        if (!s) return null;
+        let val = s.replace(/[^0-9.,]/g, '');
+        if (!val) return null;
+        const lastComma = val.lastIndexOf(',');
+        const lastDot = val.lastIndexOf('.');
+        if (lastComma !== -1 && lastDot !== -1) {
+            if (lastComma > lastDot) {
+                val = val.replace(/\./g, '');
+                val = val.replace(',', '.');
+            } else {
+                val = val.replace(/,/g, '');
+            }
+        } else if (lastComma !== -1) {
+            if (/,\d{1,2}$/.test(val)) {
+                val = val.replace(/\./g, '');
+                val = val.replace(',', '.');
+            } else {
+                val = val.replace(/,/g, '');
+            }
+        } else if (lastDot !== -1) {
+            if (/\.\d{1,2}$/.test(val)) {
+                val = val.replace(/,/g, '');
+            } else {
+                val = val.replace(/[.,]/g, '');
+            }
+        } else {
+            val = val.replace(/[.,]/g, '');
+        }
+        const num = parseFloat(val);
+        return isNaN(num) ? null : num;
+    }
+
     function sanitizePriceFieldsJS(obj) {
         if (!obj || typeof obj !== 'object') return obj;
         const clone = { ...obj };
-        if (typeof clone.price === 'string') clone.price = normalizePriceStringJS(clone.price);
-        if (typeof clone.originalPrice === 'string') clone.originalPrice = normalizePriceStringJS(clone.originalPrice);
-        if (typeof clone.original_price === 'string') clone.original_price = normalizePriceStringJS(clone.original_price);
+        if (typeof clone.price === 'string') {
+            clone.price = normalizePriceStringJS(clone.price);
+            const n = extractNumericPriceJS(clone.price);
+            if (n === null || n <= 0) clone.price = '';
+        }
+        if (typeof clone.originalPrice === 'string') {
+            clone.originalPrice = normalizePriceStringJS(clone.originalPrice);
+            const n0 = extractNumericPriceJS(clone.originalPrice);
+            if (n0 === null || n0 <= 0) clone.originalPrice = '';
+        }
+        if (typeof clone.original_price === 'string') {
+            clone.original_price = normalizePriceStringJS(clone.original_price);
+            const n1 = extractNumericPriceJS(clone.original_price);
+            if (n1 === null || n1 <= 0) clone.original_price = '';
+        }
         return clone;
+    }
+
+    // Fallback de descripción basado en ASIN (paridad con PHP)
+    function getFallbackDescriptionJS(asin = '') {
+        if (!asin) return '';
+        const known = {
+            'B08N5WRWNW': 'Altavoz inteligente con Alexa. Controla tu hogar inteligente con la voz. Reproduce música, responde preguntas y mucho más.',
+            'B0BDHB9Y8Z': 'Echo Dot (5.ª generación). Nuestro altavoz inteligente con Alexa más popular. Sonido más potente, hub de hogar inteligente integrado.',
+            'B0DN9JNXJQ': 'iPhone 16. Cámara Fusion de 48 MP con teleobjetivo 2x. Chip A18 con Neural Engine de 16 núcleos.',
+            'B08XYZABC1': 'Auriculares inalámbricos con cancelación de ruido. Batería de larga duración, sonido de alta calidad.',
+            'B07XYZDEF2': 'Tableta con pantalla de alta resolución. Procesador rápido, ideal para entretenimiento y productividad.',
+            'B09XYZGHI3': 'Smartwatch con monitor de salud. Seguimiento de actividad, notificaciones inteligentes, resistente al agua.'
+        };
+        if (known[asin]) return known[asin];
+        const prefix = asin.slice(0, 2);
+        const category = {
+            'B0': 'Producto tecnológico avanzado con características premium. Diseño moderno y funcionalidad intuitiva.',
+            'B1': 'Dispositivo electrónico de calidad superior. Ofrece rendimiento excepcional y durabilidad.',
+            'B2': 'Artículo de hogar inteligente con conectividad avanzada. Fácil de usar y configurar.',
+            'B3': 'Accesorio premium con materiales de alta calidad. Diseño elegante y funcional.',
+            'B4': 'Producto de entretenimiento con tecnología de vanguardia. Experiencia inmersiva garantizada.',
+            'B5': 'Dispositivo de salud y bienestar con sensores avanzados. Monitoreo preciso y confiable.',
+            'B6': 'Herramienta profesional con prestaciones superiores. Ideal para uso intensivo y profesional.',
+            'B7': 'Producto de moda y estilo con materiales premium. Comodidad y elegancia en un solo producto.',
+            'B8': 'Dispositivo de comunicación con tecnología innovadora. Conectividad rápida y estable.',
+            'B9': 'Accesorio de viaje duradero y funcional. Diseñado para aventureros y profesionales.'
+        };
+        if (category[prefix]) return category[prefix];
+        return 'Producto de Amazon con excelente relación calidad-precio. Envío rápido y garantía del fabricante. Miles de reseñas positivas de clientes satisfechos.';
+    }
+
+    // Obtener descripción efectiva respetando showDescription y descriptionLength
+    function getEffectiveDescription(product, descriptionLength) {
+        if (!product) return '';
+        let desc = '';
+        if (product.description && String(product.description).trim() !== '') {
+            desc = String(product.description).trim();
+        } else if (product.asin) {
+            desc = getFallbackDescriptionJS(String(product.asin));
+        }
+        if (!desc) return '';
+        if (typeof descriptionLength === 'number' && descriptionLength > 0 && desc.length > descriptionLength) {
+            return desc.substring(0, descriptionLength) + '...';
+        }
+        return desc;
     }
     
     // Función para formatear el número de reseñas
@@ -612,7 +706,7 @@
                                 className: 'cosas-amazon-content'
                             },
                                 // Título del producto
-                                product.title && el('h4', { 
+                                product.title && el('h3', { 
                                     className: 'cosas-amazon-title',
                                     'data-cosas-amazon-title': 'true',
                                     'data-block-size': blockSize,
@@ -640,14 +734,14 @@
                                         className: 'cosas-amazon-discount',
                                         style: { backgroundColor: discountColor }
                                     }, `-${product.discount}%`),
-                                    showPrice && product.price && el('div', { 
+                                    showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('div', { 
                                         className: 'cosas-amazon-price',
                                         style: { color: priceColor }
-                                    }, product.price),
-                                    showPrice && product.originalPrice && el('div', { 
+                                    }, normalizePriceStringJS(product.price)),
+                                    showPrice && normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('div', { 
                                         className: 'cosas-amazon-original-price',
                                         style: { color: originalPriceColor }
-                                    }, product.originalPrice)
+                                    }, normalizePriceStringJS(product.originalPrice))
                                 ),
                                 
                                 // Etiqueta de oferta especial (DENTRO del contenido)
@@ -658,6 +752,13 @@
                                         backgroundColor: specialOfferColor
                                     }
                                 }, specialOfferText || product.specialOffer || 'Oferta')),
+
+                                // Descripción (con fallback y límite) en horizontal dentro del grid
+                                (() => {
+                                    if (!showDescription) return null;
+                                    const d = getEffectiveDescription(product, descriptionLength || 150);
+                                    return d ? el('div', { className: 'cosas-amazon-description' }, d) : null;
+                                })(),
                                 
                                 // Botón "Ver en Amazon"
                                 showButton && el('div', { 
@@ -699,7 +800,7 @@
                             'data-block-size': blockSize
                         },
                             // Título del producto en la parte superior
-                            product.title && el('h4', { 
+                            product.title && el('h3', { 
                                 className: 'cosas-amazon-title',
                                 style: { 
                                     fontSize: '17px', 
@@ -738,7 +839,7 @@
                                         style: { 
                                             width: '100%', 
                                             height: '100%', 
-                                            objectFit: 'cover', 
+                                            objectFit: 'contain', 
                                             borderRadius: '4px' 
                                         }
                                     })
@@ -756,7 +857,7 @@
                                     } 
                                 },
                                     // Precio
-                                    showPrice && product.price && el('div', { 
+                                    showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('div', { 
                                         className: 'cosas-amazon-price',
                                         style: { 
                                             fontSize: '19px', 
@@ -765,7 +866,7 @@
                                             margin: '0', 
                                             order: 1 
                                         }
-                                    }, product.price),
+                                    }, normalizePriceStringJS(product.price)),
                                     
                                     // Línea de descuento y precio anterior
                                     (showDiscount && product.discount && product.discount > 0 && product.discount < 100) || product.originalPrice ? 
@@ -790,14 +891,14 @@
                                                     fontWeight: 'bold' 
                                                 } 
                                             }, `-${product.discount}%`),
-                                            product.originalPrice && el('span', { 
+                                            normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('span', { 
                                                 className: 'cosas-amazon-original-price',
                                                 style: { 
                                                     fontSize: '12px', 
                                                     color: originalPriceColor || '#999', 
                                                     textDecoration: 'line-through' 
                                                 } 
-                                            }, product.originalPrice)
+                                            }, normalizePriceStringJS(product.originalPrice))
                                         ) : null,
                                     
                                     // Etiqueta de oferta especial
@@ -875,7 +976,7 @@
                         }, specialOfferText || product.specialOffer || 'Oferta')),
                         
                         // Título del producto
-                        product.title && el('h4', { 
+                        product.title && el('h3', { 
                             className: 'cosas-amazon-title',
                             'data-cosas-amazon-title': 'true',
                             'data-block-size': blockSize,
@@ -894,6 +995,13 @@
                                 className: 'cosas-amazon-review-count'
                             }, formatReviewCount(product.reviewCount))
                         ),
+
+                        // Descripción (con fallback y límite) antes de precios para no-horizontales (excepto 'compact')
+                        (() => {
+                            if (!showDescription || displayStyle === 'compact') return null;
+                            const d = getEffectiveDescription(product, descriptionLength || 150);
+                            return d ? el('div', { className: 'cosas-amazon-description' }, d) : null;
+                        })(),
                         
                         // Precios
                         (showPrice || showDiscount) && el('div', { 
@@ -903,14 +1011,14 @@
                                 className: 'cosas-amazon-discount',
                                 style: { backgroundColor: discountColor }
                             }, `-${product.discount}%`),
-                            showPrice && product.price && el('div', { 
+                            showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('div', { 
                                 className: 'cosas-amazon-price',
                                 style: { color: priceColor }
-                            }, product.price),
-                            showPrice && product.originalPrice && el('div', { 
+                            }, normalizePriceStringJS(product.price)),
+                            showPrice && normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('div', { 
                                 className: 'cosas-amazon-original-price',
                                 style: { color: originalPriceColor }
-                            }, product.originalPrice)
+                            }, normalizePriceStringJS(product.originalPrice))
                         ),
                         
                         // Botón "Ver en Amazon"
@@ -1028,9 +1136,14 @@
                                         ),
                                         el('td', { className: 'cosas-amazon-table-title' },
                                             el('h4', {}, productData.title || 'Producto de Amazon'),
-                                            showDescription && productData.description && el('p', { className: 'cosas-amazon-table-description' },
-                                                (() => { const words = String(productData.description).split(/\s+/); return words.length > 15 ? words.slice(0, 15).join(' ') + '…' : words.join(' '); })()
-                                            )
+                                            (() => {
+                                                if (!showDescription) return null;
+                                                const d = getEffectiveDescription(productData, descriptionLength || 150);
+                                                if (!d) return null;
+                                                const words = String(d).split(/\s+/);
+                                                const short = words.length > 15 ? words.slice(0, 15).join(' ') + '…' : words.join(' ');
+                                                return el('p', { className: 'cosas-amazon-table-description' }, short);
+                                            })()
                                         ),
                                         el('td', { className: 'cosas-amazon-table-rating' },
                                             productData.rating ? el('div', { className: 'cosas-amazon-rating' },
@@ -1045,7 +1158,7 @@
                                             ) : el('span', { className: 'cosas-amazon-no-rating' }, 'Sin valoración')
                                         ),
                                         showPrice && el('td', { className: 'cosas-amazon-table-price' },
-                                            productData.price ? el('span', { className: 'cosas-amazon-price', style: { color: priceColor } }, productData.price) : el('span', { className: 'cosas-amazon-no-price' }, 'N/A')
+                                            (normalizePriceStringJS(productData.price) && extractNumericPriceJS(productData.price) > 0) ? el('span', { className: 'cosas-amazon-price', style: { color: priceColor } }, normalizePriceStringJS(productData.price)) : el('span', { className: 'cosas-amazon-no-price' }, 'N/A')
                                         ),
                                         showDiscount && el('td', { className: 'cosas-amazon-table-discount' }, (() => {
                                             // Usar discount válido o calcular a partir de price y original_price
@@ -1157,10 +1270,14 @@
                                 p.rating && el('span', { className: 'cosas-amazon-rating-number' }, p.rating),
                                 p.reviewCount && el('span', { className: 'cosas-amazon-review-count' }, formatReviewCount(p.reviewCount))
                             ),
-                            showPrice && p.price && el('div', { className: 'cosas-amazon-price', style: { color: priceColor } }, (typeof normalizePriceStringJS === 'function' ? normalizePriceStringJS(p.price) : p.price)),
+                            showPrice && normalizePriceStringJS(p.price) && extractNumericPriceJS(p.price) > 0 && el('div', { className: 'cosas-amazon-price', style: { color: priceColor } }, normalizePriceStringJS(p.price)),
                             showDiscount && p.discount && el('div', { className: 'cosas-amazon-discount', style: { backgroundColor: discountColor } }, `-${p.discount}%`),
-                            p.originalPrice && el('div', { className: 'cosas-amazon-original-price', style: { color: originalPriceColor } }, p.originalPrice),
-                            p.description && el('div', { className: 'cosas-amazon-description' }, p.description),
+                            normalizePriceStringJS(p.originalPrice) && extractNumericPriceJS(p.originalPrice) > 0 && el('div', { className: 'cosas-amazon-original-price', style: { color: originalPriceColor } }, normalizePriceStringJS(p.originalPrice)),
+                            (() => {
+                                if (!showDescription) return null;
+                                const d = getEffectiveDescription(p, descriptionLength || 150);
+                                return d ? el('div', { className: 'cosas-amazon-description' }, d) : null;
+                            })(),
                             showButton && el('a', {
                                 href: (amazonUrls && amazonUrls[idx]) || amazonUrl || '#',
                                 target: '_blank',
@@ -1259,93 +1376,7 @@
                     }
                 }
 
-                if (displayStyle === 'table') {
-                    // Para tabla, usar múltiples productos si están disponibles
-                    const tableProducts = productsData && productsData.length > 0 ? productsData : [product];
-                    const tableUrls = [];
-                    
-                    // Construir array de URLs para la tabla (mismo orden que PHP)
-                    if (amazonUrl) {
-                        tableUrls.push(amazonUrl);
-                    }
-                    if (amazonUrls && amazonUrls.length > 0) {
-                        tableUrls.push(...amazonUrls);
-                    }
-                    
-                    // Estructura igual a PHP: sin wrapper extra y sin clases/estilos adicionales en el contenedor
-                    return el('div', { className: `cosas-amazon-table-container cosas-amazon-size-${blockSize}` },
-                        el('table', { className: 'cosas-amazon-table' },
-                            el('thead', {},
-                                el('tr', {},
-                                    el('th', {}, 'Imagen'),
-                                    el('th', {}, 'Producto'),
-                                    el('th', {}, 'Valoración'),
-                                    showPrice && el('th', {}, 'Precio'),
-                                    showDiscount && el('th', {}, 'Descuento'),
-                                    showButton && el('th', {}, 'Acción')
-                                )
-                            ),
-                            el('tbody', {},
-                                tableUrls.map((url, index) => {
-                                    const productData = tableProducts[index] || {};
-                                    return el('tr', { key: index },
-                                        // Columna de imagen
-                                        el('td', { className: 'cosas-amazon-table-image' },
-                                            productData.image ? el('img', {
-                                                src: productData.image,
-                                                alt: productData.title || 'Producto de Amazon'
-                                            }) : el('div', { className: 'cosas-amazon-placeholder-image' }, '📦')
-                                        ),
-                                        // Columna de título
-                                        el('td', { className: 'cosas-amazon-table-title' },
-                                            el('h4', {}, productData.title || 'Producto de Amazon'),
-                                            showDescription && productData.description && el('p', { className: 'cosas-amazon-table-description' },
-                                                (() => {
-                                                    const words = String(productData.description).split(/\s+/);
-                                                    return words.length > 15 ? words.slice(0, 15).join(' ') + '…' : words.join(' ');
-                                                })()
-                                            )
-                                        ),
-                                        // Columna de valoración
-                                        el('td', { className: 'cosas-amazon-table-rating' },
-                                            productData.rating ? el('div', { className: 'cosas-amazon-rating' },
-                                                el('div', { className: 'cosas-amazon-stars' },
-                                                    Array.from({ length: 5 }, (_, i) => {
-                                                        const starClass = i < Math.floor(productData.rating) ? 'cosas-amazon-star filled' : 'cosas-amazon-star';
-                                                        return el('span', { key: i, className: starClass }, '★');
-                                                    })
-                                                ),
-                                                el('span', { className: 'cosas-amazon-rating-number' }, productData.rating),
-                                                (productData.review_count || productData.reviewCount) && el('span', { className: 'cosas-amazon-review-count' }, `(${productData.review_count || productData.reviewCount})`)
-                                            ) : el('span', { className: 'cosas-amazon-no-rating' }, 'Sin valoración')
-                                        ),
-                                        // Columna de precio
-                                        showPrice && el('td', { className: 'cosas-amazon-table-price' },
-                                            productData.price ? el('span', { className: 'cosas-amazon-price', style: { color: priceColor } }, productData.price) : el('span', { className: 'cosas-amazon-no-price' }, 'N/A')
-                                        ),
-                                        // Columna de descuento
-                                        showDiscount && el('td', { className: 'cosas-amazon-table-discount' },
-                                            productData.discount && productData.discount > 0 ? [
-                                                el('span', { className: 'cosas-amazon-discount', key: 'discount', style: { backgroundColor: discountColor } }, `-${productData.discount}%`),
-                                                productData.original_price && el('span', { className: 'cosas-amazon-original-price', key: 'original', style: { color: originalPriceColor } }, productData.original_price)
-                                            ] : el('span', { className: 'cosas-amazon-no-discount' }, 'Sin descuento')
-                                        ),
-                                        // Columna de botón
-                                        showButton && el('td', { className: 'cosas-amazon-table-button' },
-                                            el('a', {
-                                                href: url,
-                                                target: '_blank',
-                                                rel: 'noopener noreferrer',
-                                                className: 'cosas-amazon-btn',
-                                                style: { backgroundColor: buttonColor }
-                                            }, buttonText || 'Ver en Amazon')
-                                        )
-                                    );
-                                })
-                            )
-                        )
-                    );
-                }
+                // (Rama 'table' consolidada más arriba; eliminada duplicidad)
 
                 const finalContainerStyles = getDisplayStyles(displayStyle);
 
@@ -1414,7 +1445,7 @@
                                         style: { 
                                             width: '100%', 
                                             height: '100%', 
-                                            objectFit: 'cover', 
+                                            objectFit: 'contain', 
                                             borderRadius: '4px' 
                                         }
                                     })
@@ -1431,8 +1462,8 @@
                                         overflow: 'hidden' 
                                     } 
                                 },
-                                    // Precio
-                                    showPrice && product.price && el('div', { 
+                                    // Precio (normalizado)
+                                    showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('div', { 
                                         className: 'cosas-amazon-price',
                                         style: { 
                                             fontSize: '19px', 
@@ -1441,7 +1472,7 @@
                                             margin: '0', 
                                             order: 1 
                                         }
-                                    }, product.price),
+                                    }, normalizePriceStringJS(product.price)),
                                     
                                     // Línea de descuento y precio anterior
                                     (showDiscount && product.discount && product.discount > 0 && product.discount < 100) || product.originalPrice ? 
@@ -1466,14 +1497,14 @@
                                                     fontWeight: 'bold' 
                                                 } 
                                             }, `-${product.discount}%`),
-                                            product.originalPrice && el('span', { 
+                                            normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('span', { 
                                                 className: 'cosas-amazon-original-price',
                                                 style: { 
                                                     fontSize: '12px', 
                                                     color: originalPriceColor || '#999', 
                                                     textDecoration: 'line-through' 
                                                 } 
-                                            }, product.originalPrice)
+                                            }, normalizePriceStringJS(product.originalPrice))
                                         ) : null,
                                     
                                     // Etiqueta de oferta especial
@@ -1504,7 +1535,7 @@
                                             fontSize: '11px',
                                             padding: '8px 12px',
                                             marginTop: 'auto',
-                                            width: '100%',
+                                            width: 'auto',
                                             boxSizing: 'border-box',
                                             order: 5,
                                             borderRadius: '4px',
@@ -1583,15 +1614,17 @@
                                     product.rating && el('span', { className: 'cosas-amazon-rating-number' }, product.rating),
                                     product.reviewCount && el('span', { className: 'cosas-amazon-review-count' }, formatReviewCount(product.reviewCount))
                                 ),
-                                // Descripción centrada
-                                showDescription && product.description && el('div', { className: 'cosas-amazon-description' },
-                                    el('p', {}, product.description)
-                                ),
+                                // Descripción centrada (con fallback por ASIN y límite)
+                                (() => {
+                                    if (!showDescription) return null;
+                                    const d = getEffectiveDescription(product, descriptionLength || 150);
+                                    return d ? el('div', { className: 'cosas-amazon-description' }, el('p', {}, d)) : null;
+                                })(),
                                 // Precios centrados
                                 (showPrice || showDiscount) && el('div', { className: 'cosas-amazon-pricing' },
                                     showDiscount && product.discount && product.discount > 0 && product.discount < 100 && el('span', { className: 'cosas-amazon-discount', style: { backgroundColor: discountColor } }, `-${product.discount}%`),
-                                    showPrice && product.price && el('span', { className: 'cosas-amazon-price', style: { color: priceColor } }, product.price),
-                                    showPrice && product.originalPrice && el('span', { className: 'cosas-amazon-original-price', style: { color: originalPriceColor } }, product.originalPrice)
+                                    showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('span', { className: 'cosas-amazon-price', style: { color: priceColor } }, normalizePriceStringJS(product.price)),
+                                    showPrice && normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('span', { className: 'cosas-amazon-original-price', style: { color: originalPriceColor } }, normalizePriceStringJS(product.originalPrice))
                                 )
                             ),
                             // Botón centrado inferior fuera del content-wrapper
@@ -1613,8 +1646,8 @@
                         className: containerClass, 
                         style: finalContainerStyles 
                     },
-                        // Para horizontal + small/medium/large, estructura especial con contenedor de contenido
-                        ...(displayStyle === 'horizontal' && (blockSize === 'small' || blockSize === 'medium' || blockSize === 'large') ? [
+                        // Para horizontal + small/medium/large/xlarge, estructura especial con contenedor de contenido
+                        ...(displayStyle === 'horizontal' && (blockSize === 'small' || blockSize === 'medium' || blockSize === 'large' || blockSize === 'xlarge') ? [
                             // Imagen del producto (columna izquierda)
                             product.image && el('div', { 
                                 className: 'cosas-amazon-image'
@@ -1653,14 +1686,14 @@
                                         className: 'cosas-amazon-discount',
                                         style: { backgroundColor: discountColor }
                                     }, `-${product.discount}%`),
-                                    showPrice && product.price && el('span', { 
+                                    showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('span', { 
                                         className: 'cosas-amazon-price',
                                         style: { color: priceColor }
-                                    }, product.price),
-                                    showPrice && product.originalPrice && el('span', { 
+                                    }, normalizePriceStringJS(product.price)),
+                                    showPrice && normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('span', { 
                                         className: 'cosas-amazon-original-price',
                                         style: { color: originalPriceColor }
-                                    }, product.originalPrice)
+                                    }, normalizePriceStringJS(product.originalPrice))
                                 ),
                                 
                                 // Etiqueta de oferta especial (DENTRO del contenido)
@@ -1671,9 +1704,11 @@
                                         backgroundColor: specialOfferColor
                                     }
                                 }, specialOfferText || product.specialOffer || 'Oferta')),
-                                showDescription && product.description && el('div', { 
-                                    className: 'cosas-amazon-description'
-                                }, product.description),
+                                (() => {
+                                    if (!showDescription) return null;
+                                    const d = getEffectiveDescription(product, descriptionLength || 150);
+                                    return d ? el('div', { className: 'cosas-amazon-description' }, d) : null;
+                                })(),
                                 
                                 // Botón "Ver en Amazon"
                                 showButton && el('div', { 
@@ -1731,9 +1766,11 @@
                                 ),
                                 
                                 // En estilos no-horizontales del fallback, descripción antes de precios
-                                (displayStyle !== 'horizontal' && showDescription && product.description && displayStyle !== 'compact') && el('div', { 
-                                    className: 'cosas-amazon-description'
-                                }, product.description),
+                                (displayStyle !== 'horizontal' && displayStyle !== 'compact') && (() => {
+                                    if (!showDescription) return null;
+                                    const d = getEffectiveDescription(product, descriptionLength || 150);
+                                    return d ? el('div', { className: 'cosas-amazon-description' }, d) : null;
+                                })(),
                                 
                                 (showPrice || showDiscount) && el('div', { 
                                     className: 'cosas-amazon-pricing'
@@ -1742,20 +1779,22 @@
                                         className: 'cosas-amazon-discount',
                                         style: { backgroundColor: discountColor }
                                     }, `-${product.discount}%`),
-                                    showPrice && product.price && el('span', { 
+                                    showPrice && normalizePriceStringJS(product.price) && extractNumericPriceJS(product.price) > 0 && el('span', { 
                                         className: 'cosas-amazon-price',
                                         style: { color: priceColor }
-                                    }, product.price),
-                                    showPrice && product.originalPrice && el('span', { 
+                                    }, normalizePriceStringJS(product.price)),
+                                    showPrice && normalizePriceStringJS(product.originalPrice) && extractNumericPriceJS(product.originalPrice) > 0 && el('span', { 
                                         className: 'cosas-amazon-original-price',
                                         style: { color: originalPriceColor }
-                                    }, product.originalPrice)
+                                    }, normalizePriceStringJS(product.originalPrice))
                                 ),
                                 
                                 // En horizontal (p.ej. xlarge en fallback), descripción después de precios
-                                (displayStyle === 'horizontal' && showDescription && product.description) && el('div', { 
-                                    className: 'cosas-amazon-description'
-                                }, product.description),
+                                (displayStyle === 'horizontal') && (() => {
+                                    if (!showDescription) return null;
+                                    const d = getEffectiveDescription(product, descriptionLength || 150);
+                                    return d ? el('div', { className: 'cosas-amazon-description' }, d) : null;
+                                })(),
                                 
                                 // Botón "Ver en Amazon"
                                 showButton && el('div', { 
