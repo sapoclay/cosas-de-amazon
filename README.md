@@ -109,6 +109,8 @@ También funciona con el shortcode principal:
 
 ## ⚙️ Configuración
 
+<img width="1758" height="833" alt="configuracion-cosas-de-amazon" src="https://github.com/user-attachments/assets/aa2a46e3-9711-4dfa-9149-abb8d1d385cf" />
+
 ### Opciones generales
 - **Duración de caché**: Tiempo de almacenamiento temporal (minutos)
 - **Timeout de scraping**: Límite de tiempo para extracción de datos
