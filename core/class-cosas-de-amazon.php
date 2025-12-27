@@ -36,6 +36,7 @@ class CosasDeAmazon {
      * - source_urls: array de URLs a procesar (opcional)
      * Devuelve array con estadísticas.
      */
+    
     public static function run_bulk_price_refresh($args = array()) {
         if (!class_exists('CosasAmazonHelpers')) {
             require_once dirname(__FILE__) . '/../includes/helpers.php';
@@ -56,10 +57,13 @@ class CosasDeAmazon {
             $urls = self::collect_product_urls();
         }
         $urls = array_values(array_unique(array_filter(array_map('trim', $urls))));
+        
+        error_log('[CosasDeAmazon][bulk_refresh] Iniciando actualización - URLs encontradas: ' . count($urls));
 
         $limit = intval($args['limit']);
         if ($limit > 0 && count($urls) > $limit) {
             $urls = array_slice($urls, 0, $limit);
+            error_log('[CosasDeAmazon][bulk_refresh] Limitando a ' . $limit . ' URLs');
         }
 
         $stats = array(
@@ -69,6 +73,7 @@ class CosasDeAmazon {
             'success' => 0,
             'errors' => 0,
             'skipped' => 0,
+            'updated_products' => array(), // Lista de productos actualizados
         );
 
         foreach ($urls as $url) {
@@ -76,18 +81,34 @@ class CosasDeAmazon {
             try {
                 if (!CosasAmazonHelpers::is_amazon_url($url)) {
                     $stats['skipped']++;
+                    error_log('[CosasDeAmazon][bulk_refresh] URL omitida (no es Amazon): ' . $url);
                     continue;
                 }
+                
+                error_log('[CosasDeAmazon][bulk_refresh] Procesando (' . $stats['processed'] . '/' . count($urls) . '): ' . $url);
+                
+                // Forzar actualización (force_refresh = true limpia el caché primero)
                 $data = CosasAmazonHelpers::get_product_data($url, true);
+                
                 if (is_array($data) && !empty($data)) {
                     self::upsert_cache_row($url, $data);
                     $stats['success']++;
+                    
+                    // Guardar info del producto actualizado
+                    $stats['updated_products'][] = array(
+                        'url' => $url,
+                        'title' => isset($data['title']) ? substr($data['title'], 0, 50) : 'N/A',
+                        'price' => isset($data['price']) ? $data['price'] : 'N/A',
+                    );
+                    
+                    error_log('[CosasDeAmazon][bulk_refresh] ✅ Actualizado: ' . (isset($data['title']) ? substr($data['title'], 0, 40) : $url) . ' - Precio: ' . (isset($data['price']) ? $data['price'] : 'N/A'));
                 } else {
                     $stats['errors']++;
+                    error_log('[CosasDeAmazon][bulk_refresh] ❌ Error obteniendo datos para: ' . $url);
                 }
             } catch (\Throwable $e) {
                 $stats['errors']++;
-                error_log('[CosasDeAmazon][bulk_refresh] ' . $e->getMessage());
+                error_log('[CosasDeAmazon][bulk_refresh] ❌ Excepción: ' . $e->getMessage() . ' para URL: ' . $url);
             }
             if ($args['sleep'] > 0) {
                 sleep(intval($args['sleep']));
@@ -96,6 +117,9 @@ class CosasDeAmazon {
 
         $stats['finished_at'] = current_time('mysql');
         $stats['duration_sec'] = round(microtime(true) - $start, 2);
+        
+        error_log('[CosasDeAmazon][bulk_refresh] Finalizado - Procesados: ' . $stats['processed'] . ', Éxitos: ' . $stats['success'] . ', Errores: ' . $stats['errors'] . ', Tiempo: ' . $stats['duration_sec'] . 's');
+        
         return $stats;
     }
 
@@ -162,19 +186,10 @@ class CosasDeAmazon {
             foreach ($q->posts as $pid) {
                 $content = get_post_field('post_content', $pid);
                 if (!is_string($content) || $content === '') { continue; }
-                // 3a) Bloques Gutenberg
+                // 3a) Bloques Gutenberg (con soporte para bloques anidados)
                 if (function_exists('has_blocks') && has_blocks($content) && function_exists('parse_blocks')) {
                     $blocks = parse_blocks($content);
-                    foreach ($blocks as $b) {
-                        if (!is_array($b) || empty($b['blockName'])) { continue; }
-                        if ($b['blockName'] === 'cosas-amazon/producto-amazon' && !empty($b['attrs']) && is_array($b['attrs'])) {
-                            $attrs = $b['attrs'];
-                            if (!empty($attrs['amazonUrl']) && is_string($attrs['amazonUrl'])) { $out[] = $attrs['amazonUrl']; }
-                            if (!empty($attrs['amazonUrls']) && is_array($attrs['amazonUrls'])) {
-                                foreach ($attrs['amazonUrls'] as $u) { if (is_string($u)) { $out[] = $u; } }
-                            }
-                        }
-                    }
+                    $out = array_merge($out, self::extract_urls_from_blocks($blocks));
                 }
                 // 3b) Shortcodes [amazon_producto url="..."] o [cosas-amazon]
                 if (strpos($content, '[amazon_producto') !== false || strpos($content, '[cosas-amazon') !== false) {
@@ -191,6 +206,35 @@ class CosasDeAmazon {
         }
         wp_reset_postdata();
         return $out;
+    }
+
+    /**
+     * Extrae URLs de bloques Gutenberg recursivamente (incluye bloques anidados)
+     */
+    private static function extract_urls_from_blocks($blocks) {
+        $urls = array();
+        foreach ($blocks as $b) {
+            if (!is_array($b)) { continue; }
+            
+            // Verificar si es nuestro bloque
+            if (!empty($b['blockName']) && $b['blockName'] === 'cosas-amazon/producto-amazon' && !empty($b['attrs']) && is_array($b['attrs'])) {
+                $attrs = $b['attrs'];
+                if (!empty($attrs['amazonUrl']) && is_string($attrs['amazonUrl'])) { 
+                    $urls[] = $attrs['amazonUrl']; 
+                }
+                if (!empty($attrs['amazonUrls']) && is_array($attrs['amazonUrls'])) {
+                    foreach ($attrs['amazonUrls'] as $u) { 
+                        if (is_string($u)) { $urls[] = $u; } 
+                    }
+                }
+            }
+            
+            // Procesar bloques anidados (innerBlocks)
+            if (!empty($b['innerBlocks']) && is_array($b['innerBlocks'])) {
+                $urls = array_merge($urls, self::extract_urls_from_blocks($b['innerBlocks']));
+            }
+        }
+        return $urls;
     }
 
     /** Inserta/actualiza fila en la tabla propia para histórico/observabilidad. */
@@ -614,16 +658,17 @@ class CosasDeAmazon {
             }
         }
         
-        // NUEVA LÓGICA: Obtener datos del producto automáticamente si no están disponibles
-        if (empty($product_data) && !empty($amazon_url)) {
-            // Intentar obtener datos del producto usando la función helper
-            if (function_exists('cosas_amazon_get_product_data')) {
-                $product_data = cosas_amazon_get_product_data($amazon_url);
-                
-                // Si se obtuvieron datos, actualizar los atributos
-                if (!empty($product_data)) {
-                    $merged_attributes['productData'] = $product_data;
-                }
+        // FRONTEND: Preferir siempre el dato actual (desde transients),
+        // porque el bloque puede tener `productData` persistido y quedarse con precios viejos.
+        if (!empty($amazon_url) && function_exists('cosas_amazon_get_product_data')) {
+            $fresh = cosas_amazon_get_product_data($amazon_url, false);
+            if (!empty($fresh) && is_array($fresh) && !$this->is_placeholder_product($fresh)) {
+                $product_data = $fresh;
+                $merged_attributes['productData'] = $fresh;
+            } elseif (empty($product_data) && !empty($fresh) && is_array($fresh)) {
+                // Si no había datos en el bloque, usar lo que tengamos aunque sea placeholder
+                $product_data = $fresh;
+                $merged_attributes['productData'] = $fresh;
             }
         }
         
@@ -638,17 +683,19 @@ class CosasDeAmazon {
                 $urls_array = array_merge($urls_array, $amazon_urls);
             }
             
-            // Si no hay datos de productos, intentar obtenerlos
-            if (empty($products_data)) {
-                $products_data = array();
-                foreach ($urls_array as $url) {
-                    if (function_exists('cosas_amazon_get_product_data')) {
-                        $product_data_single = cosas_amazon_get_product_data($url);
-                        if (!empty($product_data_single)) {
-                            $products_data[] = $product_data_single;
-                        }
+            // Para frontend: recalcular siempre desde caché (para reflejar 'Forzar Actualización')
+            $fresh_products = array();
+            foreach ($urls_array as $url) {
+                if (function_exists('cosas_amazon_get_product_data')) {
+                    $pd = cosas_amazon_get_product_data($url, false);
+                    if (!empty($pd) && is_array($pd)) {
+                        $fresh_products[] = $pd;
                     }
                 }
+            }
+            if (!empty($fresh_products)) {
+                $products_data = $fresh_products;
+                $merged_attributes['productsData'] = $fresh_products;
             }
             
             // Renderizar siempre como carousel
@@ -663,23 +710,51 @@ class CosasDeAmazon {
                 $urls_array = array_merge($urls_array, $amazon_urls);
             }
             
-            // Si no hay datos de productos, intentar obtenerlos
-            if (empty($products_data)) {
-                $products_data = array();
-                foreach ($urls_array as $url) {
-                    if (function_exists('cosas_amazon_get_product_data')) {
-                        $product_data_single = cosas_amazon_get_product_data($url);
-                        if (!empty($product_data_single)) {
-                            $products_data[] = $product_data_single;
-                        }
+            // Para frontend: recalcular siempre desde caché (para reflejar 'Forzar Actualización')
+            $fresh_products = array();
+            foreach ($urls_array as $url) {
+                if (function_exists('cosas_amazon_get_product_data')) {
+                    $pd = cosas_amazon_get_product_data($url, false);
+                    if (!empty($pd) && is_array($pd)) {
+                        $fresh_products[] = $pd;
                     }
                 }
+            }
+            if (!empty($fresh_products)) {
+                $products_data = $fresh_products;
+                $merged_attributes['productsData'] = $fresh_products;
             }
             
             // Renderizar como tabla
             return $this->render_table($urls_array, $products_data, $merged_attributes);
-        } elseif ($multiple_products_mode && !empty($products_data)) {
-            return $this->render_multiple_products($products_data, $merged_attributes);
+        } elseif ($multiple_products_mode) {
+            // Refrescar datos desde caché para reflejar actualizaciones forzadas
+            $urls_array = array();
+            if (!empty($amazon_url)) {
+                $urls_array[] = $amazon_url;
+            }
+            if (!empty($amazon_urls)) {
+                $urls_array = array_merge($urls_array, $amazon_urls);
+            }
+
+            $fresh_products = array();
+            foreach ($urls_array as $url) {
+                if (function_exists('cosas_amazon_get_product_data')) {
+                    $pd = cosas_amazon_get_product_data($url, false);
+                    if (!empty($pd) && is_array($pd)) {
+                        $fresh_products[] = $pd;
+                    }
+                }
+            }
+
+            if (!empty($fresh_products)) {
+                $products_data = $fresh_products;
+                $merged_attributes['productsData'] = $fresh_products;
+            }
+
+            if (!empty($products_data)) {
+                return $this->render_multiple_products($products_data, $merged_attributes);
+            }
         } else {
             return $this->render_single_product($product_data, $amazon_url, $merged_attributes);
         }

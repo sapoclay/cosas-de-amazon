@@ -43,10 +43,12 @@ class CosasAmazonAdmin {
             return array();
         }
         
+        // Partimos de lo ya guardado para no “perder” claves que el formulario/envíos parciales no incluyan.
+        $prev = get_option('cosas_amazon_options', array());
         $sanitized = array();
         
         // Sanitizar estilo por defecto
-        $allowed_styles = array('horizontal', 'vertical', 'compact', 'featured');
+        $allowed_styles = array('horizontal', 'vertical', 'compact', 'featured', 'minimal', 'carousel', 'table');
         $sanitized['default_style'] = isset($options['default_style']) && in_array($options['default_style'], $allowed_styles) ? $options['default_style'] : 'horizontal';
         
         // Sanitizar duración del cache
@@ -134,7 +136,6 @@ class CosasAmazonAdmin {
         $sanitized['style_preset'] = $new_preset;
 
         // Detectar si cambió el preset respecto a lo ya guardado
-        $prev = get_option('cosas_amazon_options', array());
         $prev_preset = isset($prev['style_preset']) ? $prev['style_preset'] : 'default';
         if ($new_preset !== $prev_preset) {
             switch ($new_preset) {
@@ -185,6 +186,10 @@ class CosasAmazonAdmin {
             }
         }
 
+        // Mantener claves previas no incluidas en el saneado (pero dejando que lo saneado tenga prioridad)
+        if (is_array($prev)) {
+            return array_merge($prev, $sanitized);
+        }
         return $sanitized;
     }
     
@@ -819,13 +824,41 @@ class CosasAmazonAdmin {
                     var resultsDiv = btn.closest(".wrap, .cosas-amazon-config-page, body").find("#cache-action-results");
                     if (!resultsDiv.length) { resultsDiv = $("#cache-action-results"); }
                     
-                    makeAjaxRequest("cosas_amazon_force_update", btn, resultsDiv, function(response) {
-                        if (response.success && response.data && response.data.summary_html) {
-                            resultsDiv.html(response.data.summary_html);
-                            startStatusPolling(resultsDiv);
-                        } else {
-                            resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + (response.data || "Actualización encolada") + "</p></div>");
-                            startStatusPolling(resultsDiv);
+                    var originalText = btn.text();
+                    btn.prop("disabled", true).text("⏳ Actualizando precios...");
+                    resultsDiv.html("<div class=\"notice notice-info\"><p>⏳ <strong>Actualizando precios...</strong> Esto puede tardar unos minutos dependiendo del número de productos. No cierres esta página.</p><div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"></div></div>");
+                    
+                    $.ajax({
+                        url: cosas_amazon_admin.ajax_url,
+                        type: "POST",
+                        timeout: 300000, // 5 minutos de timeout
+                        data: {
+                            action: "cosas_amazon_force_update",
+                            nonce: cosas_amazon_admin.nonce,
+                            mode: "sync" // Modo síncrono para ejecución inmediata
+                        },
+                        success: function(response) {
+                            if (response.success && response.data && response.data.summary_html) {
+                                resultsDiv.html(response.data.summary_html);
+                            } else if (response.success) {
+                                resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + (response.data.message || response.data || "Actualización completada") + "</p></div>");
+                            } else {
+                                var errorMsg = response.data;
+                                if (typeof errorMsg === "object" && errorMsg.message) {
+                                    errorMsg = errorMsg.message;
+                                }
+                                resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error: " + errorMsg + "</p></div>");
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            var errorDetail = error;
+                            if (status === "timeout") {
+                                errorDetail = "La operación tardó demasiado. Intenta con menos productos.";
+                            }
+                            resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error de conexión: " + errorDetail + "</p></div>");
+                        },
+                        complete: function() {
+                            btn.prop("disabled", false).text(originalText);
                         }
                     });
                 });
@@ -1974,41 +2007,99 @@ class CosasAmazonAdmin {
             wp_send_json_error('Permisos insuficientes');
             return;
         }
-        // Encolar actualización en background para evitar timeouts de conexión
+        
+        // Cargar clase si no está disponible
         if (!class_exists('CosasDeAmazon')) {
             require_once dirname(__FILE__) . '/../core/class-cosas-de-amazon.php';
         }
-
-        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 0; // 0 = todos
-        $sleep = isset($_POST['sleep']) ? intval($_POST['sleep']) : 0;
-
-        // Evitar duplicados si ya hay una ejecución pendiente
-        $scheduled = wp_next_scheduled('cosas_amazon_force_price_update');
-        if ($scheduled) {
-            $when = date_i18n('Y-m-d H:i:s', $scheduled);
-            $summary_html = '<div class="notice notice-info"><p>⏳ Ya hay una actualización en cola. Próxima ejecución: ' . esc_html($when) . '</p></div>';
-            wp_send_json_success([
-                'message' => 'Actualización ya programada',
-                'scheduled' => $when,
-                'summary_html' => $summary_html,
-            ]);
+        if (!class_exists('CosasAmazonHelpers')) {
+            require_once dirname(__FILE__) . '/helpers.php';
         }
 
-        // Programar ejecución inmediata (cron) con argumentos
-        wp_schedule_single_event(time() + 1, 'cosas_amazon_force_price_update', array(array(
-            'limit' => max(0, $limit),
-            'sleep' => max(0, $sleep)
-        )));
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 50; // Por defecto 50 productos
+        $sleep = isset($_POST['sleep']) ? intval($_POST['sleep']) : 1;
+        $mode = isset($_POST['mode']) ? sanitize_text_field($_POST['mode']) : 'sync'; // sync o async
 
-        error_log('[COSAS_AMAZON_DEBUG] 🔄 Actualización de precios encolada (limit=' . $limit . ', sleep=' . $sleep . ')');
+        // Modo asíncrono: programar cron (para actualizaciones grandes)
+        if ($mode === 'async') {
+            // Evitar duplicados si ya hay una ejecución pendiente
+            $scheduled = wp_next_scheduled('cosas_amazon_force_price_update');
+            if ($scheduled) {
+                $when = date_i18n('Y-m-d H:i:s', $scheduled);
+                $summary_html = '<div class="notice notice-info"><p>⏳ Ya hay una actualización en cola. Próxima ejecución: ' . esc_html($when) . '</p></div>';
+                wp_send_json_success([
+                    'message' => 'Actualización ya programada',
+                    'scheduled' => $when,
+                    'summary_html' => $summary_html,
+                ]);
+                return;
+            }
 
-        $summary_html = '<div class="notice notice-success"><p>✅ Actualización encolada: se ejecutará en background y actualizará todos los productos detectados.</p><p>Este panel mostrará los resultados cuando finalice.</p></div>';
-        wp_send_json_success([
-            'message' => 'Actualización encolada',
-            'queued' => true,
-            'summary_html' => $summary_html,
-            'timestamp' => current_time('mysql')
-        ]);
+            // Programar ejecución inmediata (cron) con argumentos
+            wp_schedule_single_event(time() + 1, 'cosas_amazon_force_price_update', array(array(
+                'limit' => max(0, $limit),
+                'sleep' => max(0, $sleep)
+            )));
+
+            error_log('[COSAS_AMAZON_DEBUG] 🔄 Actualización de precios encolada (limit=' . $limit . ', sleep=' . $sleep . ')');
+
+            $summary_html = '<div class="notice notice-success"><p>✅ Actualización encolada: se ejecutará en background.</p></div>';
+            wp_send_json_success([
+                'message' => 'Actualización encolada',
+                'queued' => true,
+                'summary_html' => $summary_html,
+                'timestamp' => current_time('mysql')
+            ]);
+            return;
+        }
+
+        // Modo síncrono: ejecutar inmediatamente (por defecto)
+        // Aumentar límites de tiempo para la ejecución
+        @set_time_limit(300); // 5 minutos
+        @ini_set('max_execution_time', 300);
+        
+        error_log('[COSAS_AMAZON_DEBUG] 🔄 Iniciando actualización síncrona de precios (limit=' . $limit . ', sleep=' . $sleep . ')');
+        
+        try {
+            // Ejecutar actualización directamente
+            $stats = CosasDeAmazon::run_bulk_price_refresh(array(
+                'limit' => max(1, $limit),
+                'sleep' => max(0, $sleep)
+            ));
+            
+            // Guardar estadísticas
+            update_option('cosas_amazon_last_update', $stats);
+            
+            error_log('[COSAS_AMAZON_DEBUG] ✅ Actualización completada: ' . json_encode($stats));
+            
+            // Generar HTML de resumen
+            $summary_html = '<div class="notice notice-success"><p><strong>✅ Actualización completada</strong></p>';
+            $summary_html .= '<ul style="margin-left: 20px;">';
+            $summary_html .= '<li>📦 URLs procesadas: <strong>' . intval($stats['processed'] ?? 0) . '</strong></li>';
+            $summary_html .= '<li>✅ Actualizadas correctamente: <strong>' . intval($stats['success'] ?? 0) . '</strong></li>';
+            $summary_html .= '<li>❌ Errores: <strong>' . intval($stats['errors'] ?? 0) . '</strong></li>';
+            $summary_html .= '<li>⏭️ Omitidas: <strong>' . intval($stats['skipped'] ?? 0) . '</strong></li>';
+            $summary_html .= '<li>⏱️ Tiempo: <strong>' . floatval($stats['duration_sec'] ?? 0) . 's</strong></li>';
+            $summary_html .= '</ul></div>';
+            
+            wp_send_json_success([
+                'message' => 'Actualización completada',
+                'stats' => $stats,
+                'summary_html' => $summary_html,
+                'timestamp' => current_time('mysql')
+            ]);
+            
+        } catch (\Throwable $e) {
+            error_log('[COSAS_AMAZON_DEBUG] ❌ Error en actualización: ' . $e->getMessage());
+            
+            $summary_html = '<div class="notice notice-error"><p><strong>❌ Error durante la actualización</strong></p>';
+            $summary_html .= '<p>' . esc_html($e->getMessage()) . '</p></div>';
+            
+            wp_send_json_error([
+                'message' => 'Error: ' . $e->getMessage(),
+                'summary_html' => $summary_html
+            ]);
+        }
     }
 
     // Estado de actualización en background
@@ -2394,7 +2485,7 @@ class CosasAmazonAdmin {
         $options = get_option('cosas_amazon_api_options', array());
         $value = isset($options['amazon_access_key']) ? $options['amazon_access_key'] : '';
         echo '<input type="text" name="cosas_amazon_api_options[amazon_access_key]" value="' . esc_attr($value) . '" size="30" autocomplete="off">';
-        echo '<p class="description">Tu Access Key ID de AWS. Ejemplo: AKIAIOSFODNN7EXAMPLE</p>';
+        echo '<p class="description">Tu Access Key ID de AWS. Formatos válidos: <code>AKIA...</code> o <code>AKPAT...</code></p>';
     }
     
     public function amazon_secret_key_callback() {

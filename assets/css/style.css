@@ -16,6 +16,7 @@
     box-sizing: border-box;
 }
 
+
 .cosas-amazon-product:hover {
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     transform: translateY(-2px);
@@ -860,9 +861,9 @@
 
 /* Botón en la parte inferior */
 .cosas-amazon-featured .cosas-amazon-btn {
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: 2px solid white;
+    background: var(--cda-btn-bg, #FF9900) !important;
+    color: var(--cda-btn-color, #fff) !important;
+    border: 2px solid var(--cda-btn-border, #FF9900) !important;
     padding: 15px 30px;
     font-size: 16px;
     font-weight: 700;
@@ -880,8 +881,8 @@
 }
 
 .cosas-amazon-featured .cosas-amazon-btn:hover {
-    background: white;
-    color: #667eea;
+    background: var(--cda-btn-bg-hover, #e88900) !important;
+    color: var(--cda-btn-color-hover, #fff) !important;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(255,255,255,0.3);
 }

@@ -19,10 +19,11 @@ define('COSAS_AMAZON_VERSION', '2.12.0');
 define('COSAS_AMAZON_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('COSAS_AMAZON_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
-// Activar modo debug del plugin si está habilitado en configuración de emergencia o si WP_DEBUG está activo
+// Activar modo debug del plugin solo si está habilitado explícitamente en configuración de emergencia
+// Nota: se eliminó la activación automática cuando WP_DEBUG está activo para evitar ruido en debug.log.
 if (!defined('COSAS_AMAZON_DEBUG')) {
     $emergency_config = get_option('cosas_amazon_emergency_config', []);
-    $debug_enabled = (!empty($emergency_config['debug_mode'])) || (defined('WP_DEBUG') && WP_DEBUG);
+    $debug_enabled = !empty($emergency_config['debug_mode']);
     define('COSAS_AMAZON_DEBUG', $debug_enabled);
 }
 
@@ -125,6 +126,32 @@ function cosas_amazon_litespeed_headers() {
         header('Expires: Thu, 01 Jan 1970 00:00:00 GMT', true);
     }
 }
+
+// ==========================================
+// REGISTRO DEL CRON PARA ACTUALIZACIÓN DE PRECIOS
+// Debe registrarse ANTES del hook 'init' para que esté disponible cuando WordPress procese crons
+// ==========================================
+function cosas_amazon_handle_daily_price_update($args = array()) {
+    // Asegurar que la clase esté cargada
+    if (!class_exists('CosasDeAmazon')) {
+        require_once COSAS_AMAZON_PLUGIN_PATH . 'core/class-cosas-de-amazon.php';
+    }
+    
+    try {
+        $args = is_array($args) ? $args : array();
+        $stats = CosasDeAmazon::run_bulk_price_refresh($args);
+        update_option('cosas_amazon_last_update', $stats);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[CosasDeAmazon][cron] Actualización de precios completada: ' . json_encode($stats));
+        }
+    } catch (\Throwable $e) {
+        error_log('[CosasDeAmazon][cron] Error en actualización de precios: ' . $e->getMessage());
+    }
+}
+// Registrar el hook ANTES de 'init' para asegurar que esté disponible para el cron
+add_action('cosas_amazon_daily_price_update', 'cosas_amazon_handle_daily_price_update', 10, 1);
+add_action('cosas_amazon_force_price_update', 'cosas_amazon_handle_daily_price_update', 10, 1);
 
 // Inicializar el plugin
 function cosas_amazon_init() {
@@ -368,6 +395,8 @@ function cda_test_callback($request) {
 }
 
 function cda_fetch_product_data_callback($request) {
+    error_log('[COSAS_AMAZON_DEBUG] === ENDPOINT REST LLAMADO ===');
+    
     $body = $request->get_json_params();
     $url_from_body = isset($body['url']) ? $body['url'] : '';
     $url_from_param = $request->get_param('url');
@@ -375,7 +404,10 @@ function cda_fetch_product_data_callback($request) {
     $url = !empty($url_from_body) ? $url_from_body : $url_from_param;
     $url = esc_url_raw($url);
     
+    error_log('[COSAS_AMAZON_DEBUG] URL recibida: ' . $url);
+    
     if (empty($url)) {
+        error_log('[COSAS_AMAZON_DEBUG] Error: URL vacía');
         return new WP_Error('no_url', 'No URL provided', array('status' => 400));
     }
 
@@ -384,17 +416,28 @@ function cda_fetch_product_data_callback($request) {
     }
     
     $is_amazon = CosasAmazonHelpers::is_amazon_url($url);
+    error_log('[COSAS_AMAZON_DEBUG] ¿Es URL de Amazon?: ' . ($is_amazon ? 'SÍ' : 'NO'));
+    
     if (!$is_amazon) {
+        error_log('[COSAS_AMAZON_DEBUG] Error: URL no es de Amazon');
         return new WP_Error('invalid_url', 'URL is not a valid Amazon URL', array('status' => 400));
     }
 
     // Forzar obtener datos reales
     $force_refresh = isset($body['force_refresh']) ? $body['force_refresh'] : false;
+    
+    error_log('[COSAS_AMAZON_DEBUG] Llamando a get_product_data con force_refresh=' . ($force_refresh ? 'true' : 'false'));
+    
     $product_data = CosasAmazonHelpers::get_product_data($url, $force_refresh);
     
+    error_log('[COSAS_AMAZON_DEBUG] Datos obtenidos: ' . print_r($product_data, true));
+    
     if (!$product_data || empty($product_data['title'])) {
+        error_log('[COSAS_AMAZON_DEBUG] Error: No se pudieron obtener datos o título vacío');
         return new WP_Error('not_found', 'No se pudieron obtener datos del producto', array('status' => 404));
     }
 
+    error_log('[COSAS_AMAZON_DEBUG] Retornando datos exitosamente');
+    error_log('[COSAS_AMAZON_DEBUG] === FIN ENDPOINT REST ===');
     return rest_ensure_response($product_data);
 }

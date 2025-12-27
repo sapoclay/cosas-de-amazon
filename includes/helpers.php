@@ -185,16 +185,51 @@ class CosasAmazonHelpers {
         }
         
         $cache_key = 'cosas_amazon_product_' . $asin;
-        $cache_duration = 3600; // 1 hora por defecto
         
-        // Obtener duración del caché de la configuración
-        $options = get_option('cosas_amazon_options', array());
-        if (isset($options['cache_duration'])) {
-            $cache_duration = intval($options['cache_duration']) * 60; // minutos a segundos
+        // Si son datos de fallback, caché muy corto (5 minutos)
+        if (isset($product_data['is_fallback']) && $product_data['is_fallback']) {
+            $cache_duration = 300; // 5 minutos
+            self::log_debug('Datos fallback guardados con caché corto (5 min) para ASIN: ' . $asin);
+        } else {
+            // Datos reales: usar duración configurada (en segundos) o default
+            $cache_duration = self::get_cache_duration();
+            self::log_debug('Datos reales guardados en caché (' . ($cache_duration/3600) . ' horas) para ASIN: ' . $asin);
         }
         
         set_transient($cache_key, $product_data, $cache_duration);
-        self::log_debug('Datos guardados en caché para ASIN: ' . $asin);
+        
+        return true;
+    }
+
+    /**
+     * Obtener duración del caché desde la configuración
+     * @return int Duración en segundos
+     */
+    public static function get_cache_duration() {
+        $options = get_option('cosas_amazon_options', array());
+        
+        // `cache_duration` se guarda en SEGUNDOS (ver admin.php, min 300 max 86400)
+        if (isset($options['cache_duration']) && intval($options['cache_duration']) > 0) {
+            return max(300, min(86400, intval($options['cache_duration'])));
+        }
+        
+        // Por defecto: 1 hora
+        return 3600;
+    }
+
+    /**
+     * Limpiar caché de un producto específico
+     * @param string $asin ASIN del producto
+     * @return bool
+     */
+    public static function clear_product_cache($asin) {
+        if (empty($asin)) {
+            return false;
+        }
+        
+        $cache_key = 'cosas_amazon_product_' . $asin;
+        delete_transient($cache_key);
+        self::log_debug('Caché eliminada para ASIN: ' . $asin);
         
         return true;
     }
@@ -202,21 +237,35 @@ class CosasAmazonHelpers {
     /**
      * Obtener datos de fallback (datos simulados)
      */
-    public static function get_fallback_data($asin) {
+    public static function get_fallback_data($asin, $url = '') {
         self::log_debug('Usando datos de fallback NEUTRAL para ASIN: ' . $asin);
-        // Devolver un placeholder neutral sin precios/valoraciones para evitar "productos de ejemplo"
+        
+        // Crear título más informativo con enlace
+        $title = 'Ver producto en Amazon';
+        if ($asin) {
+            $title = 'Producto Amazon - ' . $asin;
+        }
+        
+        // Descripción que explica la situación
+        $description = '⚠️ No se pudieron obtener los datos automáticamente. ';
+        $description .= 'Esto puede ocurrir cuando Amazon bloquea las peticiones de scraping. ';
+        $description .= 'Haz clic en el enlace para ver el producto directamente en Amazon.';
+        
+        // Devolver un placeholder neutral sin precios/valoraciones
         return array(
             'asin' => $asin,
-            'url' => 'https://www.amazon.es/dp/' . $asin,
-            'title' => 'Producto de Amazon – ' . $asin,
+            'url' => $url ?: 'https://www.amazon.es/dp/' . $asin,
+            'title' => $title,
             'price' => '',
             'originalPrice' => '',
             'discount' => '',
             'image' => self::get_fallback_image($asin),
-            'description' => '',
+            'description' => $description,
             'specialOffer' => '',
             'rating' => '',
-            'reviewCount' => ''
+            'reviewCount' => '',
+            'is_fallback' => true,
+            'amazon_blocked' => true // Flag especial para indicar bloqueo
         );
     }
     
@@ -263,31 +312,59 @@ class CosasAmazonHelpers {
         
         self::log_debug('ASIN extraído: ' . $asin);
         
+        // Si es force_refresh, limpiar el caché existente primero
+        if ($force_refresh) {
+            self::clear_product_cache($asin);
+            self::log_debug('Force refresh: caché limpiada para ASIN: ' . $asin);
+        }
+        
         // Verificar caché primero (si no es refresh forzado)
         if (!$force_refresh) {
             $cached_data = self::get_cached_product_data($asin);
             if ($cached_data) {
-                self::log_debug('Datos obtenidos de caché');
-                return $cached_data;
+                // Si los datos en caché son de fallback, ignorarlos y hacer scraping
+                if (isset($cached_data['is_fallback']) && $cached_data['is_fallback']) {
+                    self::log_debug('Datos de caché son fallback, ignorando y forzando nuevo scraping');
+                    // NO retornar, continuar con scraping
+                } else {
+                    self::log_debug('Datos obtenidos de caché');
+                    return $cached_data;
+                }
             }
         }
-        
-    // Inferir región desde la URL (es, fr, it, de, uk, us) si la opción está activa
-    $api_options = get_option('cosas_amazon_api_options', array());
-    // Inferir SIEMPRE la región desde la URL final resuelta; es seguro y evita marketplaces erróneos
-    $region_hint = self::infer_region_from_url($final_url);
-        
-    // Intentar primero con Amazon PA-API si está configurada, forzando la región inferida
-    $product_data = self::get_product_data_from_api($asin, $region_hint);
-        
-        // Si la API falla o no está configurada, usar scraping como fallback
+    
+        // Selección de fuente de datos:
+        // - Si PA-API está activada y configurada: intentar PA-API primero.
+        // - Si PA-API NO está activada (aunque existan credenciales guardadas): usar scraping directamente.
+        $api_options = get_option('cosas_amazon_api_options', array());
+        $api_enabled = !empty($api_options['api_enabled']);
+        $api_configured = !empty($api_options['amazon_access_key']) && !empty($api_options['amazon_secret_key']) && !empty($api_options['amazon_associate_tag']);
+        $use_api = $api_enabled && $api_configured;
+
+        $force_region_from_url = !empty($api_options['force_region_from_url']);
+        $region_hint = $force_region_from_url ? self::infer_region_from_url($final_url) : null;
+
+        $product_data = false;
+        if ($use_api) {
+            // Intentar primero con Amazon PA-API; si está activa y configurada.
+            $product_data = self::get_product_data_from_api($asin, $region_hint);
+        }
+
+        // Si no se obtuvieron datos por API (o API desactivada), usar scraping
         if (!$product_data) {
-            $options = get_option('cosas_amazon_api_options', array());
-            $fallback_enabled = isset($options['fallback_to_scraping']) ? $options['fallback_to_scraping'] : 1;
-            
-            if ($fallback_enabled) {
-                self::log_debug('API falló, intentando scraping como fallback');
+            if (!$use_api) {
+                self::log_debug('PA-API deshabilitada o no configurada; usando scraping');
                 $product_data = self::get_product_data_scraping($final_url, $asin);
+            } else {
+                // API activa pero falló: decidir si hacemos fallback a scraping
+                // Nota: `fallback_to_scraping` puede no existir en UI, por defecto SÍ.
+                $fallback_enabled = isset($api_options['fallback_to_scraping']) ? (int) $api_options['fallback_to_scraping'] : 1;
+                if ($fallback_enabled) {
+                    self::log_debug('PA-API falló, usando scraping como fallback');
+                    $product_data = self::get_product_data_scraping($final_url, $asin);
+                } else {
+                    self::log_debug('Fallback a scraping deshabilitado; manteniendo fallo de PA-API');
+                }
             }
         }
         
@@ -298,12 +375,11 @@ class CosasAmazonHelpers {
             
             if ($data_source === 'simulated') {
                 self::log_debug('Usando datos simulados según configuración');
-                $product_data = self::get_fallback_data($asin);
+                $product_data = self::get_fallback_data($asin, $final_url);
             } else {
-                // Último recurso: placeholder neutral
-                self::log_debug('Usando placeholder neutral como último recurso');
-                $product_data = self::get_fallback_data($asin);
-                if ($product_data) { $product_data['is_fallback'] = true; }
+                // Último recurso: placeholder neutral con información del bloqueo
+                self::log_debug('Usando placeholder neutral como último recurso (posible bloqueo de Amazon)');
+                $product_data = self::get_fallback_data($asin, $final_url);
             }
         }
         
@@ -327,7 +403,7 @@ class CosasAmazonHelpers {
         $api = new CosasAmazonPAAPI();
         
         if (!$api->isEnabled() || !$api->isConfigured()) {
-            self::log_debug('Amazon PA-API no configurada o deshabilitada');
+            self::log_debug('Amazon PA-API no configurada o deshabilitada - continuando con scraping');
             return false;
         }
         
@@ -402,6 +478,13 @@ class CosasAmazonHelpers {
         $url_hash = substr(md5($url), 0, 8); // Hash corto de la URL
         $cache_key = 'cosas_amazon_product_' . $asin . '_' . $url_hash;
         
+        // Si es force_refresh, limpiar ambas claves de caché (simple y con hash)
+        if ($force_refresh) {
+            delete_transient($cache_key);
+            delete_transient('cosas_amazon_product_' . $asin);
+            self::log_debug('Force refresh: caché limpiada para ASIN: ' . $asin . ' (ambas claves)');
+        }
+        
         // Verificar caché (solo si no se fuerza refresh)
         if (!$force_refresh) {
             $cached_data = get_transient($cache_key);
@@ -471,21 +554,46 @@ class CosasAmazonHelpers {
      * Hacer scraping real de una página de producto de Amazon
      */
     public static function scrape_amazon_product($url, $asin) {
+        self::log_debug('=== INICIO SCRAPING ===');
+        self::log_debug('URL a scrapear: ' . $url);
+        self::log_debug('ASIN: ' . $asin);
+        
         // Obtener configuración de timeout
         $options = get_option('cosas_amazon_options', array());
         $timeout = isset($options['scraping_timeout']) ? intval($options['scraping_timeout']) : 15;
         
+        self::log_debug('Timeout configurado: ' . $timeout . ' segundos');
+        
         // Configurar headers mejorados para simular un navegador real
+        // User-Agents MÁS DIVERSOS (2025) con mayor variabilidad
         $user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            // Chrome Windows (más recientes)
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            // Firefox
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',
+            // Safari macOS
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+            // Edge
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+            // Chrome Linux
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            // Chrome macOS
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        ];
+        
+        $accept_languages = [
+            'es-ES,es;q=0.9,en;q=0.8',
+            'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
+            'es,en-US;q=0.9,en;q=0.8',
         ];
         
         $headers = array(
             'User-Agent: ' . $user_agents[array_rand($user_agents)],
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language: es-ES,es;q=0.9,en;q=0.8',
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language: ' . $accept_languages[array_rand($accept_languages)],
             'Accept-Encoding: gzip, deflate, br',
             'Connection: keep-alive',
             'Upgrade-Insecure-Requests: 1',
@@ -493,14 +601,15 @@ class CosasAmazonHelpers {
             'Sec-Fetch-Mode: navigate',
             'Sec-Fetch-Site: none',
             'Sec-Fetch-User: ?1',
-            'Cache-Control: no-cache',
-            'Pragma: no-cache',
-            'DNT: 1',
-            'Sec-GPC: 1'
+            'Cache-Control: max-age=0',
+            'DNT: 1'
         );
         
-        // Añadir delay aleatorio para evitar bloqueos
-        sleep(rand(1, 2));
+        // Delay inicial REDUCIDO para no hacer esperar tanto al usuario (1-2 segundos)
+        // Solo si detectamos bloqueo haremos delays más largos en los reintentos
+        $initial_delay = rand(1, 2);
+        self::log_debug("Esperando {$initial_delay}s antes de hacer la petición...");
+        sleep($initial_delay);
         
         $html = '';
         $http_code = 0;
@@ -525,6 +634,8 @@ class CosasAmazonHelpers {
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = curl_error($ch);
             curl_close($ch);
+            
+            self::log_debug('cURL completado - HTTP Code: ' . $http_code . ', Error: ' . ($error ?: 'ninguno') . ', HTML size: ' . strlen($html) . ' bytes');
         } else if (function_exists('wp_remote_get')) {
             // Fallback: WordPress HTTP API
             $response = @wp_remote_get($url, array(
@@ -587,20 +698,27 @@ class CosasAmazonHelpers {
                 self::log_debug("HTML no comprimido: " . strlen($html) . " bytes");
             }
             
-            // Si el HTML es muy pequeño, intentar con un User-Agent diferente
+            // Si el HTML es muy pequeño, puede ser bloqueo de Amazon - reintentar con estrategia diferente
             if (strlen($html) < 100000) {
-                self::log_debug("HTML pequeño detectado, reintentando con User-Agent diferente");
+                self::log_debug("HTML pequeño detectado (" . strlen($html) . " bytes), posible bloqueo de Amazon");
                 
-                // Usar un User-Agent más específico
-                $mobile_headers = array(
-                    'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language: es-es',
-                    'Accept-Encoding: gzip, deflate',
-                    'Connection: keep-alive'
+                // Estrategia 1: Esperar más tiempo y usar User-Agent completamente diferente
+                self::log_debug("Reintento 1/3: Esperando 5 segundos y cambiando a Firefox...");
+                sleep(5);
+                
+                $firefox_headers = array(
+                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language: es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+                    'Accept-Encoding: gzip, deflate, br',
+                    'Connection: keep-alive',
+                    'Upgrade-Insecure-Requests: 1',
+                    'Sec-Fetch-Dest: document',
+                    'Sec-Fetch-Mode: navigate',
+                    'Sec-Fetch-Site: none',
+                    'Sec-Fetch-User: ?1',
+                    'DNT: 1'
                 );
-                
-                sleep(2); // Esperar un poco más
                 
                 $ch2 = curl_init();
                 curl_setopt($ch2, CURLOPT_URL, $url);
@@ -608,7 +726,7 @@ class CosasAmazonHelpers {
                 curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
                 curl_setopt($ch2, CURLOPT_MAXREDIRS, 5);
                 curl_setopt($ch2, CURLOPT_TIMEOUT, $timeout + 5);
-                curl_setopt($ch2, CURLOPT_HTTPHEADER, $mobile_headers);
+                curl_setopt($ch2, CURLOPT_HTTPHEADER, $firefox_headers);
                 curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
                 curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
                 curl_setopt($ch2, CURLOPT_ENCODING, '');
@@ -617,34 +735,130 @@ class CosasAmazonHelpers {
                 $http_code2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
                 curl_close($ch2);
                 
-                if ($html2 && strlen($html2) > strlen($html)) {
+                if ($html2 && strlen($html2) > strlen($html) && strlen($html2) > 100000) {
                     $html = $html2;
                     $http_code = $http_code2;
-                    self::log_debug("Reintento exitoso, HTML mejorado: " . strlen($html) . " bytes");
+                    self::log_debug("✅ Reintento 1 exitoso, HTML mejorado: " . strlen($html) . " bytes");
+                } else {
+                    self::log_debug("❌ Reintento 1 falló: " . strlen($html2) . " bytes");
+                    
+                    // Estrategia 2: Safari en macOS
+                    self::log_debug("Reintento 2/3: Esperando 7 segundos y cambiando a Safari...");
+                    sleep(7);
+                    
+                    $safari_headers = array(
+                        'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 15_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+                        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language: es-ES,es;q=0.9',
+                        'Accept-Encoding: gzip, deflate, br',
+                        'Connection: keep-alive',
+                        'Upgrade-Insecure-Requests: 1'
+                    );
+                    
+                    $ch3 = curl_init();
+                    curl_setopt($ch3, CURLOPT_URL, $url);
+                    curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch3, CURLOPT_FOLLOWLOCATION, true);
+                    curl_setopt($ch3, CURLOPT_MAXREDIRS, 5);
+                    curl_setopt($ch3, CURLOPT_TIMEOUT, $timeout + 10);
+                    curl_setopt($ch3, CURLOPT_HTTPHEADER, $safari_headers);
+                    curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($ch3, CURLOPT_SSL_VERIFYHOST, false);
+                    curl_setopt($ch3, CURLOPT_ENCODING, '');
+                    
+                    $html3 = curl_exec($ch3);
+                    $http_code3 = curl_getinfo($ch3, CURLINFO_HTTP_CODE);
+                    curl_close($ch3);
+                    
+                    if ($html3 && strlen($html3) > strlen($html) && strlen($html3) > 100000) {
+                        $html = $html3;
+                        $http_code = $http_code3;
+                        self::log_debug("✅ Reintento 2 exitoso, HTML mejorado: " . strlen($html) . " bytes");
+                    } else {
+                        self::log_debug("❌ Reintento 2 falló: " . strlen($html3) . " bytes");
+                        
+                        // Estrategia 3: Edge con delay aún mayor
+                        self::log_debug("Reintento 3/3: Esperando 10 segundos y cambiando a Edge...");
+                        sleep(10);
+                        
+                        $edge_headers = array(
+                            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+                            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                            'Accept-Language: es-ES,es;q=0.9,en;q=0.8',
+                            'Accept-Encoding: gzip, deflate, br',
+                            'Connection: keep-alive',
+                            'Upgrade-Insecure-Requests: 1',
+                            'Sec-Fetch-Dest: document',
+                            'Sec-Fetch-Mode: navigate',
+                            'Sec-Fetch-Site: none',
+                            'Sec-Fetch-User: ?1'
+                        );
+                        
+                        $ch4 = curl_init();
+                        curl_setopt($ch4, CURLOPT_URL, $url);
+                        curl_setopt($ch4, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch4, CURLOPT_FOLLOWLOCATION, true);
+                        curl_setopt($ch4, CURLOPT_MAXREDIRS, 5);
+                        curl_setopt($ch4, CURLOPT_TIMEOUT, $timeout + 15);
+                        curl_setopt($ch4, CURLOPT_HTTPHEADER, $edge_headers);
+                        curl_setopt($ch4, CURLOPT_SSL_VERIFYPEER, false);
+                        curl_setopt($ch4, CURLOPT_SSL_VERIFYHOST, false);
+                        curl_setopt($ch4, CURLOPT_ENCODING, '');
+                        
+                        $html4 = curl_exec($ch4);
+                        $http_code4 = curl_getinfo($ch4, CURLINFO_HTTP_CODE);
+                        curl_close($ch4);
+                        
+                        if ($html4 && strlen($html4) > strlen($html)) {
+                            $html = $html4;
+                            $http_code = $http_code4;
+                            self::log_debug("✅ Reintento 3 exitoso, HTML final: " . strlen($html) . " bytes");
+                        } else {
+                            self::log_debug("❌ Todos los reintentos fallaron. Amazon está bloqueando todas las peticiones.");
+                            self::log_debug("🔒 BLOQUEO DETECTADO: Amazon ha bloqueado tu IP temporalmente.");
+                            self::log_debug("💡 SOLUCIONES: 1) Esperar 24-48h, 2) Cambiar IP/VPN, 3) Configurar Amazon PA-API");
+                            self::log_debug("ℹ️  Los datos se mostrarán con enlace directo a Amazon para que el usuario los vea allí.");
+                        }
+                    }
                 }
             }
         }
         
         // Verificar la respuesta - solo fallar si hay error crítico
         if ($html === false || !empty($error)) {
-            self::log_debug("Error crítico en cURL: " . $error);
+            self::log_debug("❌ Error crítico en cURL: " . $error);
+            self::log_debug("=== FIN SCRAPING (ERROR) ===");
             return false; // Devolver false para que se use el siguiente método
         }
         
         // Verificar el código de respuesta HTTP - solo fallar si no es 200
         if ($http_code !== 200) {
-            self::log_debug("HTTP Code no exitoso: " . $http_code);
+            self::log_debug("❌ HTTP Code no exitoso: " . $http_code);
+            self::log_debug("=== FIN SCRAPING (HTTP ERROR) ===");
             return false; // Devolver false para que se use el siguiente método
         }
         
         // Si no hay HTML o es muy corto, también fallar
         if (empty($html) || strlen($html) < 1000) {
-            self::log_debug("HTML vacío o muy corto: " . strlen($html) . " bytes");
+            self::log_debug("❌ HTML vacío o muy corto: " . strlen($html) . " bytes");
+            self::log_debug("=== FIN SCRAPING (HTML CORTO) ===");
             return false; // Devolver false para que se use el siguiente método
         }
         
+        self::log_debug("✅ HTML válido recibido, procediendo a parsear...");
+        
         // Parsear el HTML para extraer datos
-        return self::parse_amazon_html($html, $asin, $url);
+        $parsed_data = self::parse_amazon_html($html, $asin, $url);
+        
+        if ($parsed_data && !empty($parsed_data['title'])) {
+            self::log_debug("✅ Scraping exitoso - Título: " . $parsed_data['title']);
+            self::log_debug("=== FIN SCRAPING (ÉXITO) ===");
+        } else {
+            self::log_debug("❌ Scraping falló en el parseo");
+            self::log_debug("=== FIN SCRAPING (PARSEO FALLIDO) ===");
+        }
+        
+        return $parsed_data;
     }
 
     /**
@@ -689,6 +903,19 @@ class CosasAmazonHelpers {
      * Parsear HTML de Amazon para extraer datos del producto
      */
     public static function parse_amazon_html($html, $asin, $url) {
+        self::log_debug('=== INICIO PARSEO HTML ===');
+        self::log_debug('Tamaño HTML: ' . strlen($html) . ' bytes');
+        self::log_debug('ASIN: ' . $asin);
+        
+        // Log de una muestra del HTML para diagnóstico
+        $html_sample = substr($html, 0, 500);
+        self::log_debug('Muestra HTML (primeros 500 chars): ' . $html_sample);
+        
+        // Verificar si Amazon está bloqueando
+        if (stripos($html, 'robot') !== false || stripos($html, 'captcha') !== false || stripos($html, 'automated') !== false) {
+            self::log_debug('⚠️ ADVERTENCIA: Amazon parece estar bloqueando el scraping (detectado: robot/captcha/automated)');
+        }
+        
         // Convertir HTML a UTF-8 si es necesario
         $html = function_exists('mb_convert_encoding')
             ? mb_convert_encoding($html, 'UTF-8', 'auto')
@@ -1364,8 +1591,17 @@ class CosasAmazonHelpers {
             $product_data['image'] = self::get_fallback_image($asin);
         }
         
-        // Logging de éxito
-        self::log_debug("Scraping exitoso - Título: " . $product_data['title'] . ", Precio: " . $product_data['price']);
+        // Logging detallado de datos extraídos
+        self::log_debug("=== RESUMEN DE DATOS PARSEADOS ===");
+        self::log_debug("Título: " . ($product_data['title'] ?: '(vacío)'));
+        self::log_debug("Precio: " . ($product_data['price'] ?: '(vacío)'));
+        self::log_debug("Precio Original: " . ($product_data['originalPrice'] ?: '(vacío)'));
+        self::log_debug("Descuento: " . ($product_data['discount'] ?: '(vacío)'));
+        self::log_debug("Imagen: " . (strlen($product_data['image']) > 50 ? substr($product_data['image'], 0, 50) . '...' : $product_data['image']));
+        self::log_debug("Descripción: " . (strlen($product_data['description']) > 50 ? substr($product_data['description'], 0, 50) . '...' : ($product_data['description'] ?: '(vacía)')));
+        self::log_debug("Rating: " . ($product_data['rating'] ?: '(vacío)'));
+        self::log_debug("Review Count: " . ($product_data['reviewCount'] ?: '(vacío)'));
+        self::log_debug("=== FIN PARSEO HTML ===");
         
         return $product_data;
     }

@@ -1,10 +1,3 @@
-/**
- * Estilos para el editor de bloques - Cosas de Amazon
- * Version: 2.10.4 - PROBLEMA ENCONTRADO: overflow hidden en contenedores padre
- * Estos estilos deben coincidir con los del frontend (style.css)
- * TIMESTAMP: 2025-07-21 - FIX REAL: overflow visible en contenedores principales
- */
-
 /* Estilos específicos del editor */
 .cosas-amazon-block-editor {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
@@ -861,7 +854,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     display: flex;
     flex-direction: column;
     min-height: 120px;
-    max-width: 100%;
+        min-height: 700px;
     overflow: visible !important;
     box-sizing: border-box;
     position: relative;
@@ -1041,7 +1034,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 .block-editor-writing-flow .cosas-amazon-compact.cosas-amazon-size-large {
     padding: 20px;
     min-height: 140px;
-}
+        min-height: 800px;
 
 .editor-styles-wrapper .cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-title,
 .block-editor-writing-flow .cosas-amazon-compact.cosas-amazon-size-large .cosas-amazon-title {
@@ -1405,13 +1398,13 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     color: white;
     border: none;
     text-align: center;
-    padding: 20px;
+    padding: 30px 20px 100px 20px; /* más espacio inferior para el botón */
     display: flex !important;
     flex-direction: column !important;
     align-items: center;
     box-sizing: border-box;
-    overflow: hidden;
-    min-height: 460px; /* Paridad con frontend */
+    overflow: visible;
+    min-height: 540px; /* suficiente para imagen, título, descripción, precios y botón */
     position: relative;
 }
 
@@ -1423,7 +1416,7 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
     align-items: center;
     flex-grow: 1;
     width: 100%;
-    padding-bottom: 120px; /* Paridad con frontend */
+    padding-bottom: 0; /* el padding inferior lo da el contenedor principal */
 }
 
 /* Imagen en la parte superior */
@@ -1748,7 +1741,8 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
         display: -webkit-box !important;
         -webkit-box-orient: vertical !important;
         overflow: hidden !important;
-        text-overflow: ellipsis !important;
+        flex-grow: 0;
+        z-index: 2;
     }
     .editor-styles-wrapper .cosas-amazon-vertical .cosas-amazon-description p,
     .block-editor-writing-flow .cosas-amazon-vertical .cosas-amazon-description p {
@@ -1768,22 +1762,22 @@ body .wp-block-editor .cosas-amazon-multiple-products .cosas-amazon-horizontal.c
 /* Estilo carousel en el editor */
 .editor-styles-wrapper .cosas-amazon-carousel,
 .block-editor-writing-flow .cosas-amazon-carousel {
-    display: flex;
+    min-height: 540px; /* Aumentada para evitar superposición */
     overflow-x: auto;
     gap: 20px;
     padding: 10px;
     scroll-behavior: smooth;
-    border: 2px dashed #ccd0d4;
+    min-height: 440px;
     border-radius: 8px;
     background: #f9f9f9;
 }
 
-/* === Efectos y Animaciones (editor) — sincronizados con frontend === */
+    min-height: 620px;
 .block-editor-writing-flow .cosas-amazon-product.cda-shadow-none,
 .block-editor-writing-flow .cosas-amazon-carousel-item.cda-shadow-none,
 .editor-styles-wrapper .cosas-amazon-product.cda-shadow-none,
 .editor-styles-wrapper .cosas-amazon-carousel-item.cda-shadow-none { box-shadow: none !important; }
-
+    min-height: 740px;
 .block-editor-writing-flow .cosas-amazon-product.cda-shadow-light,
 .block-editor-writing-flow .cosas-amazon-carousel-item.cda-shadow-light,
 .editor-styles-wrapper .cosas-amazon-product.cda-shadow-light,
@@ -2718,4 +2712,5 @@ body .wp-block-editor .cosas-amazon-horizontal.cosas-amazon-size-large .cosas-am
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
+}
 }

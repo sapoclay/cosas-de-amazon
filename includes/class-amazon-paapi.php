@@ -202,6 +202,31 @@ class CosasAmazonPAAPI {
         $this->last_error = null;
         $this->last_response = null;
     }
+
+    /**
+     * Convertir diferentes tipos de error a string seguro para logs/mensajes
+     */
+    private function errorToString($error) {
+        if (is_string($error)) {
+            return $error;
+        }
+
+        if (is_scalar($error)) {
+            return (string) $error;
+        }
+
+        if (is_array($error) || is_object($error)) {
+            $encoded = function_exists('wp_json_encode')
+                ? wp_json_encode($error, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR)
+                : json_encode($error, JSON_UNESCAPED_UNICODE);
+
+            if ($encoded !== false && $encoded !== null) {
+                return $encoded;
+            }
+        }
+
+        return '';
+    }
     
     /**
      * Obtener datos de producto usando ASIN con fallback multi-región
@@ -277,11 +302,13 @@ class CosasAmazonPAAPI {
         }
         
         // Guardar error de región principal
-        $all_errors[$this->region] = $this->getLastError();
-        error_log('[CosasAmazon PA-API] ❌ Falló región principal ' . $this->region . ': ' . $this->getLastError());
+    $primary_error = $this->getLastError();
+    $primary_error_string = $this->errorToString($primary_error);
+    $all_errors[$this->region] = $primary_error;
+    error_log('[CosasAmazon PA-API] ❌ Falló región principal ' . $this->region . ': ' . $primary_error_string);
         
-        // 2. Si InternalFailure persistente, intentar con regiones de fallback
-        if (strpos($this->getLastError(), 'InternalFailure') !== false) {
+    // 2. Si InternalFailure persistente, intentar con regiones de fallback
+    if ($primary_error_string !== '' && strpos($primary_error_string, 'InternalFailure') !== false) {
             error_log('[CosasAmazon PA-API] 🔄 InternalFailure detectado - Iniciando fallback multi-región');
             
             $fallback_regions = $this->getFallbackRegions($original_region);
@@ -309,8 +336,10 @@ class CosasAmazonPAAPI {
                 }
                 
                 // Guardar error de esta región
-                $all_errors[$fallback_region] = $this->getLastError();
-                error_log('[CosasAmazon PA-API] ❌ Falló región de fallback ' . $fallback_region . ': ' . $this->getLastError());
+                $fallback_error = $this->getLastError();
+                $fallback_error_string = $this->errorToString($fallback_error);
+                $all_errors[$fallback_region] = $fallback_error;
+                error_log('[CosasAmazon PA-API] ❌ Falló región de fallback ' . $fallback_region . ': ' . $fallback_error_string);
             }
         }
         
@@ -327,7 +356,8 @@ class CosasAmazonPAAPI {
         $error_summary = 'Falló en todas las regiones: ';
         $error_details = array();
         foreach ($all_errors as $region => $error) {
-            $error_details[] = $region . '(' . substr($error, 0, 50) . ')';
+            $error_text = $this->errorToString($error);
+            $error_details[] = $region . '(' . substr($error_text, 0, 50) . ')';
         }
         $error_summary .= implode(', ', $error_details);
         
@@ -396,8 +426,8 @@ class CosasAmazonPAAPI {
         return !empty($this->access_key) && 
                !empty($this->secret_key) && 
                !empty($this->associate_tag) &&
-               strlen($this->access_key) >= 16 && // Las access keys de AWS son largas
-               strlen($this->secret_key) >= 30;   // Las secret keys son aún más largas
+               strlen($this->access_key) >= 16 && // Access keys: AKIA... o AKPAT... (formato antiguo y nuevo)
+               strlen($this->secret_key) >= 30;   // Secret keys son siempre largas
     }
     
     /**
@@ -587,78 +617,65 @@ class CosasAmazonPAAPI {
     private function makeRequestWithRetry($operation, $payload, $max_retries = 7) {
         $last_exception = null;
         $base_delay = 0.5; // Delay inicial más corto
-    $env_info_tmp = $this->detectLocalEnvironment();
-    $is_local = is_array($env_info_tmp) ? ($env_info_tmp['is_local'] ?? false) : false;
-        
-        // Si es entorno local, reducir reintentos (InternalFailure es muy común)
+        $env_info_tmp = $this->detectLocalEnvironment();
+        $is_local = is_array($env_info_tmp) ? ($env_info_tmp['is_local'] ?? false) : false;
+
+        // Solo loguear el primer intento y el resumen final
         if ($is_local) {
             $max_retries = 3;
             error_log('[CosasAmazon PA-API] 🏠 Entorno local detectado - Reduciendo reintentos a ' . $max_retries);
         } else {
             error_log('[CosasAmazon PA-API] 🌐 Entorno de producción - Usando ' . $max_retries . ' reintentos agresivos');
         }
-        
+
+        $first_error = null;
         for ($attempt = 1; $attempt <= $max_retries; $attempt++) {
             try {
-                error_log('[CosasAmazon PA-API] 🔄 Intento ' . $attempt . '/' . $max_retries . ' para operación: ' . $operation);
-                
+                if ($attempt === 1) {
+                    error_log('[CosasAmazon PA-API] 🔄 Intento 1/' . $max_retries . ' para operación: ' . $operation);
+                }
                 $result = $this->makeRequest($operation, $payload);
-                
-                // Si llegamos aquí, la petición fue exitosa
                 error_log('[CosasAmazon PA-API] ✅ Petición exitosa en intento ' . $attempt);
                 return $result;
-                
             } catch (Exception $e) {
                 $error_message = $e->getMessage();
                 $last_exception = $e;
-                
-                error_log('[CosasAmazon PA-API] ❌ Error en intento ' . $attempt . ': ' . $error_message);
-                
+                if ($attempt === 1) {
+                    $first_error = $error_message;
+                }
                 // Verificar si es un error que vale la pena reintentar
                 $should_retry = $this->shouldRetryError($error_message);
-                
-                // Para InternalFailure, siempre reintentar en producción
                 $is_internal_failure = strpos($error_message, 'InternalFailure') !== false;
                 if ($is_internal_failure && !$is_local) {
                     $should_retry = true;
-                    error_log('[CosasAmazon PA-API] 🔧 InternalFailure detectado en producción - Forzando reintento');
                 }
-                
                 if (!$should_retry || $attempt === $max_retries) {
-                    // No reintentar más, lanzar el último error
-                    if ($attempt === $max_retries) {
-                        error_log('[CosasAmazon PA-API] 🛑 Máximo de reintentos alcanzado (' . $max_retries . ')');
-                        if ($is_internal_failure) {
-                            error_log('[CosasAmazon PA-API] 💡 InternalFailure persistente - Amazon PA API está teniendo problemas temporales');
-                        }
-                    } else {
-                        error_log('[CosasAmazon PA-API] 🚫 Error no recuperable, no reintentando');
+                    // Solo loguear el último error
+                    error_log('[CosasAmazon PA-API] 🛑 Error final en intento ' . $attempt . ': ' . $error_message);
+                    if ($is_internal_failure) {
+                        error_log('[CosasAmazon PA-API] 💡 InternalFailure persistente - Amazon PA API está teniendo problemas temporales');
                     }
-                    
+                    if ($first_error && $attempt > 1) {
+                        error_log('[CosasAmazon PA-API] � Primer error fue: ' . $first_error);
+                    }
                     throw $last_exception;
                 }
-                
                 // Calcular delay exponencial con jitter mejorado
                 if ($is_internal_failure) {
-                    // Para InternalFailure, usar delays más cortos pero con más variación
                     $delay = $base_delay * pow(1.5, $attempt - 1);
-                    $jitter = rand(200, 800) / 1000; // 0.2 a 0.8 segundos de variación
+                    $jitter = rand(200, 800) / 1000;
                 } else {
-                    // Para otros errores, delay exponencial estándar
                     $delay = $base_delay * pow(2, $attempt - 1);
-                    $jitter = rand(100, 300) / 1000; // 0.1 a 0.3 segundos de jitter
+                    $jitter = rand(100, 300) / 1000;
                 }
-                
-                $total_delay = max(0.1, $delay + $jitter); // Mínimo 0.1 segundos
-                
-                error_log('[CosasAmazon PA-API] ⏱️ Esperando ' . round($total_delay, 2) . ' segundos antes del siguiente intento...');
-                
-                // WordPress-compatible sleep
-                usleep((int) ($total_delay * 1000000)); // Usar microsleep para mayor precisión
+                $total_delay = max(0.1, $delay + $jitter);
+                // Solo loguear el delay en el primer intento
+                if ($attempt === 1) {
+                    error_log('[CosasAmazon PA-API] ⏱️ Esperando ' . round($total_delay, 2) . ' segundos antes del siguiente intento...');
+                }
+                usleep((int) ($total_delay * 1000000));
             }
         }
-        
-        // Fallback (no debería llegar aquí)
         throw $last_exception;
     }
     
@@ -1150,13 +1167,14 @@ class CosasAmazonPAAPI {
                 // Obtener información más detallada del último error
                 $last_error = $this->getLastError();
                 $last_response = $this->getLastResponse();
+                $last_error_string = is_string($last_error) ? $last_error : '';
                 
                 error_log('[CosasAmazon PA-API] ❌ Test falló después de ' . $execution_time . 'ms');
                 error_log('[CosasAmazon PA-API] 📝 Último error: ' . $last_error);
                 
                 $error_details = array();
-                if ($last_error) {
-                    $error_details['last_error'] = $last_error;
+                if ($last_error_string !== '') {
+                    $error_details['last_error'] = $last_error_string;
                 }
                 if ($last_response) {
                     $error_details['response_preview'] = is_string($last_response) ? substr($last_response, 0, 200) : json_encode($last_response, JSON_UNESCAPED_UNICODE);
@@ -1174,13 +1192,15 @@ class CosasAmazonPAAPI {
                 
                 // Mensaje específico según el entorno
                 $error_message = 'No se pudieron obtener datos del producto.';
-                if ($last_error) {
-                    $error_message .= ' Error: ' . $last_error;
+                if ($last_error_string !== '') {
+                    $error_message .= ' Error: ' . $last_error_string;
                 }
                 
-                if ($is_local && strpos($last_error, 'InternalFailure') !== false) {
+                $contains_internal_failure = strpos($last_error_string, 'InternalFailure') !== false;
+
+                if ($is_local && $contains_internal_failure) {
                     $error_message .= ' [ENTORNO LOCAL: Este error es muy común en desarrollo local]';
-                } elseif (!$is_local && strpos($last_error, 'InternalFailure') !== false) {
+                } elseif (!$is_local && $contains_internal_failure) {
                     $error_message .= ' [PRODUCCIÓN: Error temporal de Amazon, verificar en unos minutos]';
                 }
                 
