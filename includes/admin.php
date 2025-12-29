@@ -20,6 +20,9 @@ class CosasAmazonAdmin {
         add_action('wp_ajax_get_cache_stats', array($this, 'ajax_get_cache_stats'));
         add_action('wp_ajax_clear_cache', array($this, 'ajax_clear_cache'));
         add_action('wp_ajax_cosas_amazon_test_paapi', array($this, 'ajax_test_paapi'));
+        // Nuevos endpoints para procesamiento por lotes (evitar timeout)
+        add_action('wp_ajax_cosas_amazon_get_urls', array($this, 'ajax_get_urls'));
+        add_action('wp_ajax_cosas_amazon_batch_update', array($this, 'ajax_batch_update'));
         
         // Añadir estilos CSS para la página de admin
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_styles'));
@@ -711,7 +714,7 @@ class CosasAmazonAdmin {
                 display: inline !important;
             }
             
-            /* Forzar recarga - ' . time() . ' */
+            /* Forzar recarga */
         ');
         
         // Añadir JavaScript para funcionalidades interactivas
@@ -743,7 +746,7 @@ class CosasAmazonAdmin {
                 function makeAjaxRequest(action, button, resultsDiv, successCallback) {
                     var originalText = button.text();
                     button.prop("disabled", true).text("Procesando...");
-                    resultsDiv.html("<div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"}");
+                    resultsDiv.html("<div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"></div>");
                     
                     $.ajax({
                         url: cosas_amazon_admin.ajax_url,
@@ -809,7 +812,7 @@ class CosasAmazonAdmin {
                     }
                     if (!resultsDiv.length) {
                         // Último recurso: crear un contenedor bajo el botón
-                        resultsDiv = $("<div id=\\"cache-results\\" style=\\"margin-top:10px;\\"></div>");
+                        resultsDiv = $("<div id=\"cache-results\" style=\"margin-top:10px;\"></div>");
                         btn.after(resultsDiv);
                     }
                     // Usar callback para colocar directamente el HTML devuelto
@@ -818,46 +821,125 @@ class CosasAmazonAdmin {
                     });
                 });
 
-                // Botón para forzar actualización
+                // Botón para forzar actualización (procesamiento por lotes para evitar timeout)
                 $(document).on("click", "#force-update-btn", function() {
                     var btn = $(this);
                     var resultsDiv = btn.closest(".wrap, .cosas-amazon-config-page, body").find("#cache-action-results");
                     if (!resultsDiv.length) { resultsDiv = $("#cache-action-results"); }
                     
                     var originalText = btn.text();
-                    btn.prop("disabled", true).text("⏳ Actualizando precios...");
-                    resultsDiv.html("<div class=\"notice notice-info\"><p>⏳ <strong>Actualizando precios...</strong> Esto puede tardar unos minutos dependiendo del número de productos. No cierres esta página.</p><div class=\"spinner is-active\" style=\"float: none; margin: 10px 0;\"></div></div>");
+                    btn.prop("disabled", true).text("⏳ Obteniendo productos...");
+                    resultsDiv.html("<div class=\"notice notice-info\"><p>⏳ <strong>Obteniendo lista de productos...</strong></p></div>");
                     
+                    // Paso 1: Obtener lista de URLs
                     $.ajax({
                         url: cosas_amazon_admin.ajax_url,
                         type: "POST",
-                        timeout: 300000, // 5 minutos de timeout
+                        timeout: 30000,
                         data: {
-                            action: "cosas_amazon_force_update",
-                            nonce: cosas_amazon_admin.nonce,
-                            mode: "sync" // Modo síncrono para ejecución inmediata
+                            action: "cosas_amazon_get_urls",
+                            nonce: cosas_amazon_admin.nonce
                         },
                         success: function(response) {
-                            if (response.success && response.data && response.data.summary_html) {
-                                resultsDiv.html(response.data.summary_html);
-                            } else if (response.success) {
-                                resultsDiv.html("<div class=\"notice notice-success\"><p>✅ " + (response.data.message || response.data || "Actualización completada") + "</p></div>");
-                            } else {
-                                var errorMsg = response.data;
-                                if (typeof errorMsg === "object" && errorMsg.message) {
-                                    errorMsg = errorMsg.message;
-                                }
-                                resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error: " + errorMsg + "</p></div>");
+                            if (!response.success || !response.data.urls || response.data.urls.length === 0) {
+                                resultsDiv.html("<div class=\"notice notice-warning\"><p>⚠️ No se encontraron productos para actualizar.</p></div>");
+                                btn.prop("disabled", false).text(originalText);
+                                return;
                             }
+                            
+                            var urls = response.data.urls;
+                            var total = urls.length;
+                            var batchSize = 5; // Procesar 5 productos por lote
+                            var currentIndex = 0;
+                            var stats = { success: 0, errors: 0, skipped: 0 };
+                            
+                            // Mostrar barra de progreso
+                            resultsDiv.html(
+                                "<div class=\"notice notice-info\">" +
+                                "<p><strong>⏳ Actualizando precios...</strong></p>" +
+                                "<p>Procesando <span id=\"batch-current\">0</span> de <strong>" + total + "</strong> productos</p>" +
+                                "<div style=\"background: #e0e0e0; border-radius: 4px; height: 20px; margin: 10px 0; overflow: hidden;\">" +
+                                "<div id=\"batch-progress\" style=\"background: #0073aa; height: 100%; width: 0%; transition: width 0.3s;\"></div>" +
+                                "</div>" +
+                                "<p id=\"batch-stats\">✅ 0 | ❌ 0 | ⏭️ 0</p>" +
+                                "<p><small>No cierres esta página durante la actualización.</small></p>" +
+                                "</div>"
+                            );
+                            
+                            btn.text("⏳ Procesando...");
+                            
+                            // Función para procesar un lote
+                            function processBatch() {
+                                if (currentIndex >= total) {
+                                    // Finalizado
+                                    var summaryClass = stats.errors > 0 ? "notice-warning" : "notice-success";
+                                    resultsDiv.html(
+                                        "<div class=\"notice " + summaryClass + "\">" +
+                                        "<p><strong>✅ Actualización completada</strong></p>" +
+                                        "<ul style=\"margin-left: 20px;\">" +
+                                        "<li>📦 Total procesados: <strong>" + total + "</strong></li>" +
+                                        "<li>✅ Actualizados correctamente: <strong>" + stats.success + "</strong></li>" +
+                                        "<li>❌ Errores: <strong>" + stats.errors + "</strong></li>" +
+                                        "<li>⏭️ Omitidos: <strong>" + stats.skipped + "</strong></li>" +
+                                        "</ul></div>"
+                                    );
+                                    btn.prop("disabled", false).text(originalText);
+                                    return;
+                                }
+                                
+                                // Obtener el siguiente lote de URLs
+                                var batch = urls.slice(currentIndex, currentIndex + batchSize);
+                                
+                                $.ajax({
+                                    url: cosas_amazon_admin.ajax_url,
+                                    type: "POST",
+                                    timeout: 120000, // 2 minutos por lote
+                                    data: {
+                                        action: "cosas_amazon_batch_update",
+                                        nonce: cosas_amazon_admin.nonce,
+                                        urls: JSON.stringify(batch)
+                                    },
+                                    success: function(response) {
+                                        if (response.success && response.data) {
+                                            stats.success += response.data.success || 0;
+                                            stats.errors += response.data.errors || 0;
+                                            stats.skipped += response.data.skipped || 0;
+                                        } else {
+                                            stats.errors += batch.length;
+                                        }
+                                        
+                                        currentIndex += batch.length;
+                                        
+                                        // Actualizar UI
+                                        var percent = Math.round((currentIndex / total) * 100);
+                                        $("#batch-current").text(currentIndex);
+                                        $("#batch-progress").css("width", percent + "%");
+                                        $("#batch-stats").html("✅ " + stats.success + " | ❌ " + stats.errors + " | ⏭️ " + stats.skipped);
+                                        
+                                        // Procesar siguiente lote
+                                        setTimeout(processBatch, 500);
+                                    },
+                                    error: function(xhr, status, error) {
+                                        stats.errors += batch.length;
+                                        currentIndex += batch.length;
+                                        
+                                        // Actualizar UI y continuar
+                                        var percent = Math.round((currentIndex / total) * 100);
+                                        $("#batch-current").text(currentIndex);
+                                        $("#batch-progress").css("width", percent + "%");
+                                        $("#batch-stats").html("✅ " + stats.success + " | ❌ " + stats.errors + " | ⏭️ " + stats.skipped);
+                                        
+                                        // Continuar con el siguiente lote
+                                        setTimeout(processBatch, 1000);
+                                    }
+                                });
+                            }
+                            
+                            // Iniciar procesamiento
+                            processBatch();
                         },
                         error: function(xhr, status, error) {
-                            var errorDetail = error;
-                            if (status === "timeout") {
-                                errorDetail = "La operación tardó demasiado. Intenta con menos productos.";
-                            }
-                            resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error de conexión: " + errorDetail + "</p></div>");
-                        },
-                        complete: function() {
+                            resultsDiv.html("<div class=\"notice notice-error\"><p>❌ Error obteniendo lista de productos: " + (error || status) + "</p></div>");
                             btn.prop("disabled", false).text(originalText);
                         }
                     });
@@ -2184,6 +2266,130 @@ class CosasAmazonAdmin {
             'message' => 'Debug AJAX funcionando correctamente',
             'debug_info' => $debug_info
         ]);
+    }
+    
+    /**
+     * AJAX: Obtener lista de URLs de productos para procesamiento por lotes
+     * Evita timeout al procesar muchos productos
+     */
+    public function ajax_get_urls() {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
+            wp_send_json_error('Error de seguridad');
+            return;
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permisos insuficientes');
+            return;
+        }
+        
+        // Cargar clase si no está disponible
+        if (!class_exists('CosasDeAmazon')) {
+            require_once dirname(__FILE__) . '/../core/class-cosas-de-amazon.php';
+        }
+        
+        // Obtener todas las URLs de productos
+        $urls = CosasDeAmazon::collect_product_urls_public();
+        $urls = array_values(array_unique(array_filter(array_map('trim', $urls))));
+        
+        wp_send_json_success([
+            'urls' => $urls,
+            'total' => count($urls)
+        ]);
+    }
+    
+    /**
+     * AJAX: Procesar un lote pequeño de URLs (evita timeout)
+     * Recibe un array de URLs y las procesa una por una
+     */
+    public function ajax_batch_update() {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
+            wp_send_json_error('Error de seguridad');
+            return;
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permisos insuficientes');
+            return;
+        }
+        
+        // Cargar clases necesarias
+        if (!class_exists('CosasDeAmazon')) {
+            require_once dirname(__FILE__) . '/../core/class-cosas-de-amazon.php';
+        }
+        if (!class_exists('CosasAmazonHelpers')) {
+            require_once dirname(__FILE__) . '/helpers.php';
+        }
+        
+        // Obtener URLs a procesar en este lote
+        $urls = isset($_POST['urls']) ? $_POST['urls'] : array();
+        if (!is_array($urls)) {
+            $urls = json_decode(stripslashes($urls), true);
+        }
+        if (!is_array($urls) || empty($urls)) {
+            wp_send_json_error('No se proporcionaron URLs');
+            return;
+        }
+        
+        // Límite de tiempo para este lote (60 segundos debería ser suficiente para 5-10 productos)
+        @set_time_limit(120);
+        @ini_set('max_execution_time', 120);
+        
+        $results = array(
+            'processed' => 0,
+            'success' => 0,
+            'errors' => 0,
+            'skipped' => 0,
+            'details' => array()
+        );
+        
+        foreach ($urls as $url) {
+            $url = sanitize_text_field($url);
+            $results['processed']++;
+            
+            try {
+                if (!CosasAmazonHelpers::is_amazon_url($url)) {
+                    $results['skipped']++;
+                    $results['details'][] = array(
+                        'url' => $url,
+                        'status' => 'skipped',
+                        'message' => 'No es URL de Amazon'
+                    );
+                    continue;
+                }
+                
+                // Forzar actualización (limpia caché primero)
+                $data = CosasAmazonHelpers::get_product_data($url, true);
+                
+                if (is_array($data) && !empty($data)) {
+                    CosasDeAmazon::upsert_cache_row($url, $data);
+                    $results['success']++;
+                    $results['details'][] = array(
+                        'url' => $url,
+                        'status' => 'success',
+                        'title' => isset($data['title']) ? substr($data['title'], 0, 50) : 'N/A',
+                        'price' => isset($data['price']) ? $data['price'] : 'N/A'
+                    );
+                } else {
+                    $results['errors']++;
+                    $results['details'][] = array(
+                        'url' => $url,
+                        'status' => 'error',
+                        'message' => 'No se pudieron obtener datos'
+                    );
+                }
+            } catch (\Throwable $e) {
+                $results['errors']++;
+                $results['details'][] = array(
+                    'url' => $url,
+                    'status' => 'error',
+                    'message' => $e->getMessage()
+                );
+            }
+            
+            // Pequeña pausa entre productos para no saturar Amazon
+            usleep(500000); // 0.5 segundos
+        }
+        
+        wp_send_json_success($results);
     }
     
     public function check_menu_exists() {

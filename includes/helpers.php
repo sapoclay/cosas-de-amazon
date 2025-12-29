@@ -991,8 +991,43 @@ class CosasAmazonHelpers {
         }
         
         // Extraer precio actual - Patrones mejorados y más robustos
-        $price_patterns = [
-            // PRIORIDAD MÁXIMA: Patrón específico identificado por el usuario
+        // NOTA: Para productos con variaciones, priorizar el precio del buybox (opción seleccionada)
+        
+        // Si ya tenemos precio del JSON (por ejemplo, de datos de twister/variantes), no buscar en HTML
+        // Esto evita tomar precios de productos relacionados/recomendados
+        if (!empty($product_data['price'])) {
+            self::log_debug('✅ Precio ya obtenido de JSON embebido: ' . $product_data['price'] . ' - Saltando scraping HTML de precios');
+        } else {
+            // IMPORTANTE: Limpiar HTML de carruseles de productos relacionados ANTES de buscar precios
+            // Esto evita capturar precios de productos recomendados como "Los clientes también vieron"
+            $html_for_price = $html;
+            
+            // Eliminar carruseles de productos relacionados/recomendados que contienen precios de OTROS productos
+            $carousel_patterns = [
+                // Carruseles de "productos alternativos" y "también vieron"
+                '/<div[^>]*class="[^"]*a-carousel-container[^"]*"[^>]*>.*?<\/div>\s*<\/div>\s*<\/div>/is',
+                // Widgets de productos similares (cerberus, p13n)
+                '/<div[^>]*data-type="Cerberus"[^>]*>.*?<script>/is',
+                '/<div[^>]*class="[^"]*p13n-sc-[^"]*"[^>]*>.*?<\/li>\s*<\/ol>/is',
+                // Sección "También te puede interesar"
+                '/<div[^>]*id="[^"]*sims-[^"]*"[^>]*>.*?<\/div>/is',
+            ];
+            
+            foreach ($carousel_patterns as $pattern) {
+                $html_for_price = preg_replace($pattern, '', $html_for_price);
+            }
+            
+            self::log_debug('HTML limpio de carruseles: ' . strlen($html_for_price) . ' bytes (original: ' . strlen($html) . ')');
+        
+            $price_patterns = [
+            // PRIORIDAD MÁXIMA: Precio del buybox principal (productos con variaciones seleccionadas)
+            // #corePrice_feature_div contiene el precio de la variación actualmente seleccionada
+            '/<div[^>]*id="corePrice_feature_div"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            '/<div[^>]*id="corePriceDisplay_desktop_feature_div"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            // Precio en el buybox derecho (área de compra)
+            '/<div[^>]*id="buyBoxInner"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            '/<div[^>]*id="apex_desktop"[^>]*>.*?<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            // Patrón específico identificado por el usuario
             // div.a-section.a-spacing-micro > span.a-price.aok-align-center > span.a-offscreen
             '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
             '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
@@ -1028,7 +1063,7 @@ class CosasAmazonHelpers {
         
         foreach ($price_patterns as $i => $pattern) {
             self::log_debug("Probando patrón de precio $i: " . substr($pattern, 0, 80) . "...");
-            if (preg_match($pattern, $html, $matches)) {
+            if (preg_match($pattern, $html_for_price, $matches)) {
                 // Para patrones con tres grupos (completo + decimales + símbolo)
                 if (count($matches) > 3 && strpos($pattern, 'a-price-whole') !== false && strpos($pattern, 'a-price-fraction') !== false) {
                     $price_text = trim($matches[1]) . ',' . trim($matches[2]) . '€';
@@ -1050,8 +1085,19 @@ class CosasAmazonHelpers {
                 
                 if (!empty($price_text) && (preg_match('/[0-9]/', $price_text) || preg_match('/[€$£¥₹₽]/', $price_text))) {
                     // Limpiar precio de caracteres extraños pero mantener formato
-                    $price_text = preg_replace('/[^\d€$£¥₹₽,.\s]/', '', $price_text);
+                    $price_text = preg_replace('/[^\d€$£¥₹₽,.\s\-–—a]/i', '', $price_text);
                     $price_text = trim($price_text);
+                    
+                    // Detectar si es un rango de precios ("Desde 19,99€ - 29,99€" o "19,99€ a 29,99€")
+                    // En ese caso, tomar el precio más bajo (primer precio)
+                    if (preg_match('/(\d+[,.]?\d*)\s*[€$£¥₹₽]?\s*[-–—]\s*\d+[,.]?\d*\s*[€$£¥₹₽]?/', $price_text) ||
+                        preg_match('/(\d+[,.]?\d*)\s*[€$£¥₹₽]?\s+a\s+\d+[,.]?\d*\s*[€$£¥₹₽]?/i', $price_text)) {
+                        // Es un rango - extraer el primer precio (más bajo)
+                        if (preg_match('/([€$£¥₹₽]?\s*\d+[,.]?\d*\s*[€$£¥₹₽]?)/', $price_text, $range_match)) {
+                            $price_text = trim($range_match[1]);
+                            self::log_debug("Rango de precios detectado, usando precio más bajo: " . $price_text);
+                        }
+                    }
                     
                     if (!empty($price_text)) {
                         $product_data['price'] = $price_text;
@@ -1061,16 +1107,17 @@ class CosasAmazonHelpers {
                     }
                 }
             }
-
-            // Si el precio extraído es cero o inválido, limpiarlo para activar fallback "Ver precio en Amazon"
-            if (!empty($product_data['price'])) {
-                $num_check = self::extract_numeric_price($product_data['price']);
-                if ($num_check <= 0) {
-                    self::log_debug('Precio extraído no válido (0). Limpiando para usar texto por defecto.');
-                    $product_data['price'] = '';
-                }
+        } // Fin del foreach de price_patterns
+        
+        // Si el precio extraído es cero o inválido, limpiarlo para activar fallback "Ver precio en Amazon"
+        if (!empty($product_data['price'])) {
+            $num_check = self::extract_numeric_price($product_data['price']);
+            if ($num_check <= 0) {
+                self::log_debug('Precio extraído no válido (0). Limpiando para usar texto por defecto.');
+                $product_data['price'] = '';
             }
         }
+        } // Fin del else - búsqueda de precio en HTML
         
         // Extraer descuento directo de Amazon (patrones mejorados y más específicos)
         $discount_patterns = [
@@ -2002,6 +2049,17 @@ class CosasAmazonHelpers {
     public static function extract_json_data($html) {
         $json_data = array();
         
+        // PRIORIDAD 1: Buscar precio en datos de variantes/twister (productos con múltiples opciones)
+        // Patrón: "N opciones a partir de XX,XX €" con priceWithoutCurrencySymbol
+        if (preg_match('/"priceWithoutCurrencySymbol"\s*:\s*"([0-9.]+)"/', $html, $price_match)) {
+            $price_value = floatval($price_match[1]);
+            if ($price_value > 0) {
+                // Formatear precio al estilo español
+                $json_data['price'] = number_format($price_value, 2, ',', '.') . ' €';
+                self::log_debug('Precio extraído de JSON twister: ' . $json_data['price']);
+            }
+        }
+        
         // Buscar datos JSON embebidos en scripts
         $json_patterns = [
             // Patrón para datos de producto embebidos
@@ -2024,7 +2082,8 @@ class CosasAmazonHelpers {
                     if (isset($decoded['name'])) {
                         $json_data['title'] = $decoded['name'];
                     }
-                    if (isset($decoded['offers']['price'])) {
+                    // Solo sobrescribir precio si no lo tenemos de twister
+                    if (empty($json_data['price']) && isset($decoded['offers']['price'])) {
                         $json_data['price'] = $decoded['offers']['price'];
                     }
                     if (isset($decoded['offers']['priceCurrency'])) {

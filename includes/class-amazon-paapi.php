@@ -527,18 +527,53 @@ class CosasAmazonPAAPI {
             $data['image'] = $item['Images']['Primary']['Large']['URL'];
         }
         
-        // Precio
-        if (isset($item['Offers']['Listings'][0]['Price']['DisplayAmount'])) {
-            $data['price'] = $item['Offers']['Listings'][0]['Price']['DisplayAmount'];
+        // Precio - Buscar el mejor precio entre todas las ofertas disponibles
+        // Para productos con variaciones, puede haber múltiples Listings
+        $best_price = null;
+        $best_price_display = '';
+        $best_listing_index = 0;
+        
+        if (isset($item['Offers']['Listings']) && is_array($item['Offers']['Listings'])) {
+            foreach ($item['Offers']['Listings'] as $idx => $listing) {
+                if (isset($listing['Price']['Amount'])) {
+                    $listing_price = floatval($listing['Price']['Amount']);
+                    // Tomar el precio más bajo disponible (mejor oferta para el usuario)
+                    if ($best_price === null || $listing_price < $best_price) {
+                        $best_price = $listing_price;
+                        $best_price_display = isset($listing['Price']['DisplayAmount']) ? $listing['Price']['DisplayAmount'] : '';
+                        $best_listing_index = $idx;
+                    }
+                }
+            }
         }
         
-        // Precio original (antes del descuento) y ahorro oficial
-        $hasSavingBasis = isset($item['Offers']['Listings'][0]['SavingBasis']['DisplayAmount']);
-        $hasSavingsField = isset($item['Offers']['Listings'][0]['Price']['Savings']['DisplayAmount'])
-            || isset($item['Offers']['Listings'][0]['Price']['Savings']['Percentage']);
+        // Si encontramos un precio, usarlo
+        if (!empty($best_price_display)) {
+            $data['price'] = $best_price_display;
+        } elseif (isset($item['Offers']['Listings'][0]['Price']['DisplayAmount'])) {
+            // Fallback al primer listing si no se pudo parsear Amount
+            $data['price'] = $item['Offers']['Listings'][0]['Price']['DisplayAmount'];
+            $best_listing_index = 0;
+        }
+        
+        // También verificar OfferSummary para rango de precios (productos con variaciones)
+        if (empty($data['price']) && isset($item['Offers']['Summaries'])) {
+            foreach ($item['Offers']['Summaries'] as $summary) {
+                if (isset($summary['LowestPrice']['DisplayAmount'])) {
+                    $data['price'] = $summary['LowestPrice']['DisplayAmount'];
+                    break;
+                }
+            }
+        }
+        
+        // Precio original (antes del descuento) y ahorro oficial - usar el mismo listing que el precio
+        $listing = isset($item['Offers']['Listings'][$best_listing_index]) ? $item['Offers']['Listings'][$best_listing_index] : null;
+        $hasSavingBasis = $listing && isset($listing['SavingBasis']['DisplayAmount']);
+        $hasSavingsField = $listing && (isset($listing['Price']['Savings']['DisplayAmount'])
+            || isset($listing['Price']['Savings']['Percentage']));
 
         if ($hasSavingBasis) {
-            $data['originalPrice'] = $item['Offers']['Listings'][0]['SavingBasis']['DisplayAmount'];
+            $data['originalPrice'] = $listing['SavingBasis']['DisplayAmount'];
         }
 
         // Heurística: identificar posibles precios por unidad para evitar falsos descuentos

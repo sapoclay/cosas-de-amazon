@@ -134,6 +134,11 @@ class CosasDeAmazon {
         $urls = array_merge($urls, self::collect_urls_from_posts());
         return $urls;
     }
+    
+    /** Versión pública de collect_product_urls para procesamiento por lotes */
+    public static function collect_product_urls_public() {
+        return self::collect_product_urls();
+    }
 
     private static function collect_urls_from_option() {
         $out = array();
@@ -238,7 +243,7 @@ class CosasDeAmazon {
     }
 
     /** Inserta/actualiza fila en la tabla propia para histórico/observabilidad. */
-    private static function upsert_cache_row($url, $product_data) {
+    public static function upsert_cache_row($url, $product_data) {
         global $wpdb;
         $table = $wpdb->prefix . 'cosas_amazon_cache';
         // Suprimir errores para evitar 500 si no hay conexión o falta la tabla
@@ -2200,14 +2205,26 @@ class CosasDeAmazon {
         }
         
         $special_offer_text = '';
+        $discount_value = null;
+        if (!empty($product_data['discount'])) {
+            $discount_value = intval(preg_replace('/[^0-9]/', '', (string)$product_data['discount']));
+        } elseif (!empty($product_data['originalPrice'])) {
+            $pct = $this->compute_discount_percent_from_prices($product_data['price'] ?? null, $product_data['originalPrice']);
+            if ($pct !== null && $pct > 0) { $discount_value = $pct; }
+        }
+        $opts = get_option('cosas_amazon_options', array());
+        $high_discount_threshold = isset($opts['high_discount_threshold']) ? intval($opts['high_discount_threshold']) : 50;
+        $is_high_discount = ($discount_value !== null && $discount_value >= $high_discount_threshold);
         
         // Prioridad: specialOfferText > product_data['specialOffer'] > descuento > texto por defecto
         if (!empty($attributes['specialOfferText'])) {
             $special_offer_text = $attributes['specialOfferText'];
         } elseif (!empty($product_data['specialOffer'])) {
             $special_offer_text = $product_data['specialOffer'];
-        } elseif (!empty($product_data['discount'])) {
-            $special_offer_text = 'Oferta ' . $product_data['discount'] . '%';
+        } elseif ($is_high_discount) {
+            $special_offer_text = '🔥 Chollo -' . $discount_value . '%';
+        } elseif ($discount_value !== null) {
+            $special_offer_text = 'Oferta ' . $discount_value . '%';
         } else {
             $special_offer_text = 'Oferta';
         }

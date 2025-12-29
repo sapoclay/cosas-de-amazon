@@ -307,6 +307,11 @@ function cosas_amazon_activate() {
     
     // Limpiar cache de opciones para forzar recarga
     wp_cache_delete('cosas_amazon_options', 'options');
+
+    // Restaurar contenido que se hubiera ocultado al desactivar
+    if (function_exists('cosas_amazon_restore_blocks_on_activate')) {
+        cosas_amazon_restore_blocks_on_activate();
+    }
     
     error_log('[COSAS_AMAZON_DEBUG] Plugin activado completamente');
 }
@@ -314,6 +319,11 @@ function cosas_amazon_activate() {
 function cosas_amazon_deactivate() {
     wp_clear_scheduled_hook('cosas_amazon_daily_price_update');
     wp_clear_scheduled_hook('cosas_amazon_force_price_update');
+
+    // Ocultar bloques/shortcodes de Cosas de Amazon en el contenido
+    if (function_exists('cosas_amazon_disable_blocks_on_deactivate')) {
+        cosas_amazon_disable_blocks_on_deactivate();
+    }
 }
 
 // Hooks de activación y desactivación
