@@ -1,4 +1,4 @@
-<?php
+0<?php
 /**
  * Funciones helper del plugin Cosas de Amazon
  */
@@ -81,7 +81,7 @@ class CosasAmazonHelpers {
     /**
      * Normalizar precio para mostrar en formato español preservando exactamente los céntimos capturados.
      * Preferimos el string original (dos dígitos de céntimos) y solo como último recurso formateamos por float.
-     * Resultado: "1.234,56 €"
+     * Resultado: "1.234,56 €" o "2.499 €" (sin céntimos para precios enteros altos)
      */
     public static function normalize_price_display($price) {
         if (empty($price)) { return ''; }
@@ -98,19 +98,35 @@ class CosasAmazonHelpers {
         }
 
         // 1) Intento preferente: detectar enteros + separador decimal + dos dígitos y reconstruir sin alterar céntimos
-        // Formato europeo con coma decimal
+        // Formato europeo con coma decimal: 1.234,56 € o 24,99 €
         if (preg_match('/(?<!\d)(\d{1,3}(?:[\.\s]\d{3})*|\d+),(\d{2})(?!\d)/u', $s, $m)) {
             $int = preg_replace('/[^0-9]/', '', $m[1]);
             // Reinsertar separadores de miles como punto
             $int_fmt = number_format((int)$int, 0, ',', '.');
             $cents = $m[2];
+            // Si los céntimos son 00 y el precio es >= 100, mostrar sin céntimos
+            if ($cents === '00' && (int)$int >= 100) {
+                return $int_fmt . ' €';
+            }
             return $int_fmt . ',' . $cents . ' €';
         }
+        
+        // Formato europeo entero con separador de miles: 2.499 € (sin céntimos)
+        if (preg_match('/(?<!\d)(\d{1,3}(?:\.\d{3})+)(?!\d)/u', $s, $m)) {
+            $int = preg_replace('/[^0-9]/', '', $m[1]);
+            $int_fmt = number_format((int)$int, 0, ',', '.');
+            return $int_fmt . ' €';
+        }
+        
         // Formato con punto decimal (ej. JSON/LD) - convertimos a coma pero preservamos dos dígitos
         if (preg_match('/(?<!\d)(\d{1,3}(?:[,\s]\d{3})*|\d+)\.(\d{2})(?!\d)/u', $s, $m)) {
             $int = preg_replace('/[^0-9]/', '', $m[1]);
             $int_fmt = number_format((int)$int, 0, ',', '.');
             $cents = $m[2];
+            // Si los céntimos son 00 y el precio es >= 100, mostrar sin céntimos
+            if ($cents === '00' && (int)$int >= 100) {
+                return $int_fmt . ' €';
+            }
             return $int_fmt . ',' . $cents . ' €';
         }
         // Si hay un solo dígito decimal, pad a dos (Amazon muestra dos)
@@ -121,13 +137,17 @@ class CosasAmazonHelpers {
             return $int_fmt . ',' . $cents . ' €';
         }
 
-        // 2) Solo enteros detectados: formatear como ",00 €"
+        // 2) Solo enteros detectados: formatear sin céntimos si >= 100, con céntimos si < 100
         if (preg_match('/\d+/', $s, $m)) {
             $int = preg_replace('/[^0-9]/', '', $m[0]);
             if ($int !== '') {
                 $intval = (int)$int;
                 if ($intval > 0) {
                     $int_fmt = number_format($intval, 0, ',', '.');
+                    // Para precios >= 100 enteros, no mostrar céntimos
+                    if ($intval >= 100) {
+                        return $int_fmt . ' €';
+                    }
                     return $int_fmt . ',00 €';
                 }
                 // Si es 0, no formatear como precio
@@ -137,6 +157,10 @@ class CosasAmazonHelpers {
         // 3) Último recurso: parseo numérico y formateo (puede redondear)
         $value = self::extract_numeric_price($s);
         if ($value > 0) {
+            // Si el precio es entero y >= 100, no mostrar céntimos
+            if (fmod($value, 1) == 0 && $value >= 100) {
+                return number_format($value, 0, ',', '.') . ' €';
+            }
             $formatted = number_format($value, 2, ',', '.');
             return $formatted . ' €';
         }
@@ -932,8 +956,79 @@ class CosasAmazonHelpers {
             'description' => '',
             'specialOffer' => '',
             'rating' => '',
-            'reviewCount' => ''
+            'reviewCount' => '',
+            'availability' => 'En stock' // Por defecto asumimos disponible
         );
+        
+        // Detectar disponibilidad del producto - ENFOQUE MEJORADO
+        // Primero verificar indicadores POSITIVOS de disponibilidad (más confiables)
+        $is_available = false;
+        $is_unavailable = false;
+        
+        // Indicadores FUERTES de disponibilidad (presencia de botones de compra)
+        $strong_available_patterns = array(
+            '/id="add-to-cart-button"[^>]*>/i',
+            '/id="buy-now-button"[^>]*>/i',
+            '/id="submit\.add-to-cart"[^>]*>/i',
+            '/name="submit\.add-to-cart"/i',
+            '/"buyingOptionContent"/i',
+            '/id="addToCart"[^>]*>/i',
+            '/class="[^"]*add-to-cart[^"]*"/i'
+        );
+        
+        foreach ($strong_available_patterns as $pattern) {
+            if (preg_match($pattern, $html)) {
+                $is_available = true;
+                self::log_debug('✅ Producto DISPONIBLE - Detectado botón de compra');
+                break;
+            }
+        }
+        
+        // Solo si NO encontramos indicadores fuertes de disponibilidad, buscar indicadores de NO disponibilidad
+        if (!$is_available) {
+            $unavailable_patterns = array(
+                // Patrones muy específicos para productos sin stock
+                '/id="availability"[^>]*>\s*<[^>]*>\s*(?:Actualmente no disponible|Currently unavailable)/is',
+                '/id="outOfStock"/i',
+                '/class="[^"]*a-color-price[^"]*"[^>]*>\s*(?:No disponible|Currently unavailable)\s*</is',
+                '/"availability"\s*:\s*"[^"]*(?:OutOfStock|SoldOut|Discontinued)"/i',
+                '/id="availability"[^>]*>.*?(?:Temporalmente sin existencias|out of stock)/is'
+            );
+            
+            foreach ($unavailable_patterns as $pattern) {
+                if (preg_match($pattern, $html)) {
+                    $is_unavailable = true;
+                    self::log_debug('❌ Producto NO DISPONIBLE - Patrón detectado');
+                    break;
+                }
+            }
+        }
+        
+        // Indicadores secundarios de disponibilidad (texto)
+        if (!$is_available && !$is_unavailable) {
+            $secondary_available_patterns = array(
+                '/id="availability"[^>]*>.*?(?:En stock|In Stock|Disponible|Envío GRATIS)/is',
+                '/"availability"\s*:\s*"[^"]*(?:InStock|Available|InStoreOnly|LimitedAvailability)"/i',
+                '/id="deliveryMessageMirId"[^>]*>/i',  // Si hay mensaje de entrega, está disponible
+                '/id="mir-layout-DELIVERY_BLOCK"/i'   // Bloque de entrega presente
+            );
+            
+            foreach ($secondary_available_patterns as $pattern) {
+                if (preg_match($pattern, $html)) {
+                    $is_available = true;
+                    self::log_debug('✅ Producto DISPONIBLE - Indicador secundario');
+                    break;
+                }
+            }
+        }
+        
+        // Establecer disponibilidad final
+        // Por defecto asumimos disponible a menos que haya evidencia clara de lo contrario
+        if ($is_unavailable && !$is_available) {
+            $product_data['availability'] = 'No disponible';
+        } else {
+            $product_data['availability'] = 'En stock';
+        }
         
         // Intentar extraer datos de JSON embebido primero
         $json_data = self::extract_json_data($html);
@@ -1004,6 +1099,18 @@ class CosasAmazonHelpers {
             
             // Eliminar carruseles de productos relacionados/recomendados que contienen precios de OTROS productos
             $carousel_patterns = [
+                // CRÍTICO: Eliminar iframes de anuncios patrocinados (contienen precios de otros productos)
+                '/<iframe[^>]*id="[^"]*ape_[^"]*"[^>]*>.*?<\/iframe>/is',
+                '/<iframe[^>]*name="[^"]*arid[^"]*"[^>]*>.*?<\/iframe>/is',
+                // Eliminar divs de anuncios de Amazon Advertising
+                '/<div[^>]*class="[^"]*ad-feedback[^"]*"[^>]*>.*?<\/div>/is',
+                '/<div[^>]*data-ad-feedback[^>]*>.*?<\/div>/is',
+                // Eliminar secciones de "Comprados juntos habitualmente" (productos bundle)
+                '/<div[^>]*id="[^"]*sims-fbt[^"]*"[^>]*>.*?<\/div>/is',
+                '/<div[^>]*data-csa-c-type="item"[^>]*>.*?<\/div>/is',
+                // Eliminar widgets de video de marcas patrocinadas
+                '/<div[^>]*class="[^"]*_multi-brand-video[^"]*"[^>]*>.*?<\/div>/is',
+                '/<div[^>]*data-video-ad-attributes-props[^>]*>.*?<\/div>/is',
                 // Carruseles de "productos alternativos" y "también vieron"
                 '/<div[^>]*class="[^"]*a-carousel-container[^"]*"[^>]*>.*?<\/div>\s*<\/div>\s*<\/div>/is',
                 // Widgets de productos similares (cerberus, p13n)
@@ -1011,13 +1118,17 @@ class CosasAmazonHelpers {
                 '/<div[^>]*class="[^"]*p13n-sc-[^"]*"[^>]*>.*?<\/li>\s*<\/ol>/is',
                 // Sección "También te puede interesar"
                 '/<div[^>]*id="[^"]*sims-[^"]*"[^>]*>.*?<\/div>/is',
+                // Sección "Libros relacionados" con anuncios
+                '/<div[^>]*id="CardInstance[^"]*"[^>]*>.*?<\/div>/is',
+                // Comentarios HTML con anuncios
+                '/<!--CardsClient-->.*?<!--/is',
             ];
             
             foreach ($carousel_patterns as $pattern) {
                 $html_for_price = preg_replace($pattern, '', $html_for_price);
             }
             
-            self::log_debug('HTML limpio de carruseles: ' . strlen($html_for_price) . ' bytes (original: ' . strlen($html) . ')');
+            self::log_debug('HTML limpio de carruseles y anuncios: ' . strlen($html_for_price) . ' bytes (original: ' . strlen($html) . ')');
         
             $price_patterns = [
             // PRIORIDAD MÁXIMA: Precio del buybox principal (productos con variaciones seleccionadas)
@@ -1034,6 +1145,9 @@ class CosasAmazonHelpers {
             // Variaciones del patrón específico
             '/<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
             '/<span[^>]*class="[^"]*aok-align-center[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+            // Patrones específicos para precios de alto valor con separador de miles (formato europeo)
+            // Ejemplo: 2.499,00 € o 2.499 €
+            '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([0-9]{1,3}(?:\.[0-9]{3})*)<\/span>.*?<span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([0-9]{2})<\/span>/is',
             // Patrones específicos para Amazon España (.es)
             '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span><span[^>]*class="[^"]*a-price-fraction[^"]*"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)<\/span>/i',
@@ -1044,6 +1158,9 @@ class CosasAmazonHelpers {
             '/<span[^>]*class="[^"]*a-price-symbol[^"]*"[^>]*>€<\/span><span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([0-9]+)<\/span>/i',
             '/<span[^>]*>€<\/span><span[^>]*>([0-9]+,[0-9]{2})<\/span>/i',
             '/<span[^>]*>([0-9]+,[0-9]{2})<\/span><span[^>]*>€<\/span>/i',
+            // Patrones para precios de alto valor (más de 1000€)
+            '/<span[^>]*>€<\/span><span[^>]*>([0-9]{1,3}\.[0-9]{3}(?:,[0-9]{2})?)<\/span>/i',
+            '/<span[^>]*>([0-9]{1,3}\.[0-9]{3}(?:,[0-9]{2})?)<\/span><span[^>]*>€<\/span>/i',
             // Patrones originales mejorados
             '/<span[^>]*id="priceblock_[^"]*price"[^>]*>([^<]+)<\/span>/i',
             '/<span[^>]*id="priceblock_dealprice"[^>]*>([^<]+)<\/span>/i',
@@ -1066,12 +1183,18 @@ class CosasAmazonHelpers {
             if (preg_match($pattern, $html_for_price, $matches)) {
                 // Para patrones con tres grupos (completo + decimales + símbolo)
                 if (count($matches) > 3 && strpos($pattern, 'a-price-whole') !== false && strpos($pattern, 'a-price-fraction') !== false) {
-                    $price_text = trim($matches[1]) . ',' . trim($matches[2]) . '€';
+                    $whole = trim($matches[1]);
+                    $fraction = trim($matches[2]);
+                    // Si la parte entera ya tiene formato con punto (separador de miles), mantenerlo
+                    $price_text = $whole . ',' . $fraction . ' €';
                     self::log_debug("Precio extraído con patrón completo $i: " . $price_text);
                 }
                 // Para patrones con dos grupos (precio completo + decimales)
                 else if (count($matches) > 2 && strpos($pattern, 'a-price-whole') !== false) {
-                    $price_text = trim($matches[1]) . ',' . trim($matches[2]);
+                    $whole = trim($matches[1]);
+                    $fraction = isset($matches[2]) ? trim($matches[2]) : '00';
+                    // Mantener formato europeo con punto como separador de miles
+                    $price_text = $whole . ',' . $fraction . ' €';
                     self::log_debug("Precio extraído con patrón dos grupos $i: " . $price_text);
                 } else {
                     $price_text = trim(html_entity_decode(strip_tags($matches[1]), ENT_QUOTES, 'UTF-8'));
@@ -1578,6 +1701,10 @@ class CosasAmazonHelpers {
                 '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
                 '/<div[^>]*class="[^"]*a-section[^"]*a-spacing-micro[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
                 '/<span[^>]*class="[^"]*a-price[^"]*aok-align-center[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>([^<]+)<\/span>/is',
+                // Patrones específicos para precios de alto valor (formato europeo con separador de miles)
+                // Formato: 2.499,00 € o 2.499 € (con o sin céntimos)
+                '/([0-9]{1,3}\.[0-9]{3}(?:,[0-9]{2})?)\s*€/i',
+                '/€\s*([0-9]{1,3}\.[0-9]{3}(?:,[0-9]{2})?)/i',
                 // Patrones específicos para Amazon España
                 '/([0-9]+,[0-9]{2})\s*€/i',
                 '/€\s*([0-9]+,[0-9]{2})/i',
@@ -1886,12 +2013,16 @@ class CosasAmazonHelpers {
                 $clean_price = str_replace(',', '', $clean_price);
             }
         } elseif (strpos($clean_price, '.') !== false) {
-            // Solo puntos
-            if (preg_match('/\.\d{1,2}$/', $clean_price)) {
+            // Solo puntos - distinguir entre decimal y separador de miles
+            // Patrones de separador de miles europeo: 1.234 o 2.499 (grupos de 3 dígitos después del punto)
+            if (preg_match('/^\d{1,3}(\.\d{3})+$/', $clean_price)) {
+                // Formato europeo con separador de miles: 1.234 o 2.499.000
+                $clean_price = str_replace('.', '', $clean_price);
+            } elseif (preg_match('/\.\d{1,2}$/', $clean_price)) {
                 // Formato decimal: 12.34
                 // No hacer nada, ya está en formato correcto
             } else {
-                // Separador de miles: 1.234 -> eliminar puntos
+                // Otros casos con puntos - probablemente separador de miles
                 $clean_price = str_replace('.', '', $clean_price);
             }
         }
@@ -2045,31 +2176,82 @@ class CosasAmazonHelpers {
     
     /**
      * Extraer datos de JSON embebido en las páginas de Amazon
+     * Esta función busca precios y datos del producto en múltiples fuentes JSON
      */
     public static function extract_json_data($html) {
         $json_data = array();
         
-        // PRIORIDAD 1: Buscar precio en datos de variantes/twister (productos con múltiples opciones)
-        // Patrón: "N opciones a partir de XX,XX €" con priceWithoutCurrencySymbol
-        if (preg_match('/"priceWithoutCurrencySymbol"\s*:\s*"([0-9.]+)"/', $html, $price_match)) {
-            $price_value = floatval($price_match[1]);
-            if ($price_value > 0) {
-                // Formatear precio al estilo español
-                $json_data['price'] = number_format($price_value, 2, ',', '.') . ' €';
-                self::log_debug('Precio extraído de JSON twister: ' . $json_data['price']);
+        // MÉTODO 1: Buscar precio en "displayPrice" del buybox (formato texto: "2.499,00 €")
+        if (preg_match('/"displayPrice"\s*:\s*"([^"]+€[^"]*|[^"]*€[^"]+)"/', $html, $display_match)) {
+            $price_candidate = trim($display_match[1]);
+            // Verificar que tenga un número válido
+            if (preg_match('/[0-9]/', $price_candidate)) {
+                $json_data['price'] = $price_candidate;
+                self::log_debug('Precio extraído de displayPrice: ' . $json_data['price']);
             }
         }
         
-        // Buscar datos JSON embebidos en scripts
+        // MÉTODO 2: Buscar priceAmount (formato numérico: 2499.0 o 2499 o 24.99)
+        if (empty($json_data['price'])) {
+            // Buscar todos los priceAmount y tomar el primero válido que no sea 0
+            if (preg_match_all('/"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]+)?)/', $html, $price_matches)) {
+                foreach ($price_matches[1] as $price_str) {
+                    $price_value = floatval($price_str);
+                    if ($price_value > 0) {
+                        // Formatear precio al estilo español
+                        // Detectar si es un precio con céntimos (tiene parte decimal significativa)
+                        $has_cents = (fmod($price_value, 1) != 0);
+                        if ($has_cents) {
+                            $json_data['price'] = number_format($price_value, 2, ',', '.') . ' €';
+                        } else {
+                            // Para precios enteros, mostrar sin céntimos para precios >= 100
+                            if ($price_value >= 100) {
+                                $json_data['price'] = number_format($price_value, 0, ',', '.') . ' €';
+                            } else {
+                                $json_data['price'] = number_format($price_value, 2, ',', '.') . ' €';
+                            }
+                        }
+                        self::log_debug('Precio extraído de priceAmount: ' . $json_data['price']);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // MÉTODO 3: Buscar en datos de variantes/twister
+        if (empty($json_data['price'])) {
+            if (preg_match('/"priceWithoutCurrencySymbol"\s*:\s*"([0-9.,]+)"/', $html, $price_match)) {
+                $price_str = str_replace(',', '.', $price_match[1]);
+                $price_value = floatval($price_str);
+                if ($price_value > 0) {
+                    $has_cents = (fmod($price_value, 1) != 0);
+                    if ($has_cents) {
+                        $json_data['price'] = number_format($price_value, 2, ',', '.') . ' €';
+                    } else {
+                        $json_data['price'] = number_format($price_value, 0, ',', '.') . ' €';
+                    }
+                    self::log_debug('Precio extraído de priceWithoutCurrencySymbol: ' . $json_data['price']);
+                }
+            }
+        }
+        
+        // MÉTODO 4: Buscar "price" directo con valor numérico en contexto de ofertas
+        if (empty($json_data['price'])) {
+            // Patrón para encontrar precio en formato JSON dentro de scripts
+            if (preg_match('/"price"\s*:\s*"?([0-9]+(?:[.,][0-9]+)?)"?\s*,\s*"priceCurrency"\s*:\s*"EUR"/', $html, $price_eur)) {
+                $price_str = str_replace(',', '.', $price_eur[1]);
+                $price_value = floatval($price_str);
+                if ($price_value > 0) {
+                    $json_data['price'] = number_format($price_value, 2, ',', '.') . ' €';
+                    self::log_debug('Precio extraído de price+priceCurrency: ' . $json_data['price']);
+                }
+            }
+        }
+        
+        // Buscar datos JSON-LD estructurados
         $json_patterns = [
-            // Patrón para datos de producto embebidos
-            '/window\.P\s*=\s*window\.P\s*\|\|\s*\{\};\s*P\.when\(\'A\'\)\.execute\(function\(A\)\s*\{\s*return\s*A\.declarative\([^}]+\}\s*,\s*"product-facts"\s*,\s*({[^}]+})\s*\)\s*;\s*\}\s*\);/s',
-            // Patrón para datos de precios en JSON
-            '/priceblock_dealprice[^{]+({[^}]+})/s',
-            // Patrón para datos estructurados JSON-LD
+            // Patrón para datos estructurados JSON-LD (Schema.org)
             '/<script type="application\/ld\+json"[^>]*>([^<]+)<\/script>/i',
-            // Patrón para datos de configuración del producto
-            '/window\.ue_pdp\s*=\s*window\.ue_pdp\s*\|\|\s*\{\};\s*ue_pdp\.asin\s*=\s*"[^"]+"\s*;\s*ue_pdp\.productData\s*=\s*({[^}]+})\s*;/s'
         ];
         
         foreach ($json_patterns as $pattern) {

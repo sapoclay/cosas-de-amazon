@@ -117,23 +117,33 @@
         const lastDot = val.lastIndexOf('.');
         if (lastComma !== -1 && lastDot !== -1) {
             if (lastComma > lastDot) {
+                // Formato europeo: 1.234,56
                 val = val.replace(/\./g, '');
                 val = val.replace(',', '.');
             } else {
+                // Formato americano: 1,234.56
                 val = val.replace(/,/g, '');
             }
         } else if (lastComma !== -1) {
             if (/,\d{1,2}$/.test(val)) {
+                // Decimales europeos: 12,34
                 val = val.replace(/\./g, '');
                 val = val.replace(',', '.');
             } else {
+                // Separador de miles: 1,234
                 val = val.replace(/,/g, '');
             }
         } else if (lastDot !== -1) {
-            if (/\.\d{1,2}$/.test(val)) {
+            // Detectar formato europeo con separador de miles: 2.499 (grupos de 3 dígitos después del punto)
+            if (/^\d{1,3}(\.\d{3})+$/.test(val)) {
+                // Separador de miles europeo: 2.499 o 1.234.567
+                val = val.replace(/\./g, '');
+            } else if (/\.\d{1,2}$/.test(val)) {
+                // Decimales americanos: 12.34
                 val = val.replace(/,/g, '');
             } else {
-                val = val.replace(/[.,]/g, '');
+                // Otros casos con puntos - probablemente separador de miles
+                val = val.replace(/\./g, '');
             }
         } else {
             val = val.replace(/[.,]/g, '');
