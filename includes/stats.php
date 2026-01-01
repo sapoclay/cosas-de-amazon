@@ -9,6 +9,8 @@ if (!defined('ABSPATH')) {
 }
 
 class CosasAmazonStats {
+    /** Cache de existencia de la tabla de stats para evitar SHOW TABLES en cada click. */
+    private static $stats_table_exists = null;
     
     public function __construct() {
         add_action('wp_footer', array($this, 'track_product_views'));
@@ -42,9 +44,23 @@ class CosasAmazonStats {
      */
     private function has_amazon_products() {
         global $post;
-        if (!$post) return false;
+        if (!$post || !is_singular()) return false;
         
-        return has_block('cosas-amazon/producto-amazon', $post);
+        $content = $post->post_content ?? '';
+        if (empty($content)) return false;
+        
+        // Verificar bloque Gutenberg
+        if (has_block('cosas-amazon/producto-amazon', $post)) {
+            return true;
+        }
+        
+        // Verificar shortcodes
+        if (strpos($content, '[amazon_producto') !== false || 
+            strpos($content, '[cosas-amazon') !== false) {
+            return true;
+        }
+        
+        return false;
     }
     
     /**
@@ -95,9 +111,15 @@ class CosasAmazonStats {
         $prev = $wpdb->suppress_errors();
         $wpdb->suppress_errors(true);
         try {
-            // Verificar si la tabla existe
-            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
+            if (self::$stats_table_exists === null) {
+                $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name));
+                self::$stats_table_exists = ($exists === $table_name);
+            }
+            if (!self::$stats_table_exists) {
                 $this->create_stats_table();
+                $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name));
+                self::$stats_table_exists = ($exists === $table_name);
+                if (!self::$stats_table_exists) { return; }
             }
             // Insertar fila
             $wpdb->insert(
@@ -182,8 +204,7 @@ class CosasAmazonStats {
         $table_name = $wpdb->prefix . 'cosas_amazon_stats';
         $date_limit = date('Y-m-d H:i:s', strtotime("-{$days} days"));
         
-        // Verificar si la tabla existe
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name)) !== $table_name) {
             return array(
                 'total_views' => 0,
                 'total_clicks' => 0,

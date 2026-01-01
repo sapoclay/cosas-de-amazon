@@ -48,13 +48,15 @@ if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/class-amazon-paapi.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/class-amazon-paapi.php';
 }
 
-// Cargar sistema de estadísticas en todos los contextos (frontend y admin)
-if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/stats.php')) {
+// Cargar sistema de estadísticas solo si el tracking está habilitado
+$_cda_opts = get_option('cosas_amazon_options', array());
+if (!empty($_cda_opts['track_clicks']) && file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/stats.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/stats.php';
 }
+unset($_cda_opts);
 
-// Cargar clase admin siempre (necesaria para verificaciones)
-if (file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php')) {
+// Cargar clase admin solo en contexto admin para reducir carga en frontend
+if (is_admin() && file_exists(COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php')) {
     require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/admin.php';
 }
 
@@ -159,6 +161,19 @@ function cosas_amazon_handle_daily_price_update($args = array()) {
 // Registrar el hook ANTES de 'init' para asegurar que esté disponible para el cron
 add_action('cosas_amazon_daily_price_update', 'cosas_amazon_handle_daily_price_update', 10, 1);
 add_action('cosas_amazon_force_price_update', 'cosas_amazon_handle_daily_price_update', 10, 1);
+
+// Refresh asíncrono para revalidar datos sin bloquear el frontend
+add_action('cosas_amazon_async_refresh', 'cosas_amazon_handle_async_refresh', 10, 2);
+function cosas_amazon_handle_async_refresh($url, $asin) {
+    if (!class_exists('CosasAmazonHelpers')) {
+        require_once COSAS_AMAZON_PLUGIN_PATH . 'includes/helpers.php';
+    }
+    try {
+        CosasAmazonHelpers::get_product_data($url, true);
+    } catch (\Throwable $e) {
+        cosas_amazon_debug('Async refresh error: ' . $e->getMessage());
+    }
+}
 
 // Inicializar el plugin
 function cosas_amazon_init() {

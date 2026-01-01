@@ -9,6 +9,20 @@ if (!defined('ABSPATH')) {
 }
 
 class CosasAmazonHelpers {
+    /** Cache local de opciones para minimizar lecturas a BD. */
+    private static $options_cache = array();
+    /** Cache de existencia de la tabla de caché. */
+    private static $cache_table_exists = null;
+    
+    /** Obtener opción con caché local. */
+    private static function get_option_cached($name, $default = array()) {
+        if (array_key_exists($name, self::$options_cache)) {
+            return self::$options_cache[$name];
+        }
+        $value = get_option($name, $default);
+        self::$options_cache[$name] = $value;
+        return $value;
+    }
     
     /**
      * Extraer ASIN de una URL de Amazon
@@ -230,7 +244,7 @@ class CosasAmazonHelpers {
      * @return int Duración en segundos
      */
     public static function get_cache_duration() {
-        $options = get_option('cosas_amazon_options', array());
+        $options = self::get_option_cached('cosas_amazon_options', array());
         
         // `cache_duration` se guarda en SEGUNDOS (ver admin.php, min 300 max 86400)
         if (isset($options['cache_duration']) && intval($options['cache_duration']) > 0) {
@@ -256,6 +270,61 @@ class CosasAmazonHelpers {
         self::log_debug('Caché eliminada para ASIN: ' . $asin);
         
         return true;
+    }
+
+    /** Obtener caché persistente de la tabla propia como fallback rápido. */
+    public static function get_db_cached_product_data($url) {
+        global $wpdb;
+        if (empty($url)) { return false; }
+        $table = $wpdb->prefix . 'cosas_amazon_cache';
+        $prev = $wpdb->suppress_errors();
+        $wpdb->suppress_errors(true);
+        try {
+            if (self::$cache_table_exists === null) {
+                $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+                self::$cache_table_exists = ($exists === $table);
+            }
+            if (!self::$cache_table_exists) { return false; }
+            $row = $wpdb->get_row($wpdb->prepare("SELECT product_data, updated_at FROM {$table} WHERE url = %s", $url), ARRAY_A);
+            if (!$row || empty($row['product_data'])) { return false; }
+            $data = json_decode($row['product_data'], true);
+            if (!is_array($data)) { return false; }
+            // Guardar timestamp de actualización para diagnóstico si se necesitara
+            if (!isset($data['_cached_updated_at'])) {
+                $data['_cached_updated_at'] = $row['updated_at'] ?? '';
+            }
+            return $data;
+        } catch (\Throwable $e) {
+            return false;
+        } finally {
+            $wpdb->suppress_errors($prev);
+        }
+    }
+
+    /** Programar actualización asíncrona evitando golpear Amazon en tiempo de carga. */
+    private static function maybe_schedule_async_refresh($url, $asin) {
+        if (is_admin()) { return; }
+        if (function_exists('wp_doing_cron') && wp_doing_cron()) { return; }
+        $asin = trim((string) $asin);
+        if ($asin === '') { return; }
+        $lock_key = 'cosas_amazon_async_lock_' . $asin;
+        if (get_transient($lock_key)) { return; }
+        set_transient($lock_key, 1, 600); // Bloqueo corto para evitar duplicados
+        if (function_exists('wp_schedule_single_event')) {
+            wp_schedule_single_event(time() + 60, 'cosas_amazon_async_refresh', array($url, $asin));
+        }
+    }
+
+    /** Persistir en tabla propia para usar como caché persistente. */
+    private static function persist_cache_row($url, $product_data) {
+        if (!class_exists('CosasDeAmazon')) { return; }
+        try {
+            if (method_exists('CosasDeAmazon', 'upsert_cache_row')) {
+                CosasDeAmazon::upsert_cache_row($url, $product_data);
+            }
+        } catch (\Throwable $e) {
+            // Silenciar: no queremos bloquear el render si la BD falla
+        }
     }
     
     /**
@@ -297,8 +366,15 @@ class CosasAmazonHelpers {
      * Obtener datos del producto (versión simplificada)
      */
     public static function get_product_data($url, $force_refresh = false) {
+        // Cache en memoria: evitar procesar la misma URL varias veces en una peticion
+        $url_key = md5($url);
+        if (!$force_refresh && isset(self::$product_cache[$url_key])) {
+            return self::$product_cache[$url_key];
+        }
+        
         // Log del inicio
         self::log_debug('Iniciando get_product_data', $url);
+        $cached_data = null;
         
         if (!self::is_amazon_url($url)) {
             self::log_debug('URL no es de Amazon', $url);
@@ -356,11 +432,22 @@ class CosasAmazonHelpers {
                 }
             }
         }
+
+        // Si no hay transients, intentar caché persistente en la tabla propia (stale-while-revalidate)
+        if (!$force_refresh && empty($cached_data)) {
+            $db_cached = self::get_db_cached_product_data($final_url);
+            if (!empty($db_cached) && is_array($db_cached)) {
+                self::log_debug('Usando caché persistente desde tabla para evitar scraping en tiempo de carga');
+                self::cache_product_data($asin, $db_cached);
+                self::maybe_schedule_async_refresh($final_url, $asin);
+                return $db_cached;
+            }
+        }
     
         // Selección de fuente de datos:
         // - Si PA-API está activada y configurada: intentar PA-API primero.
         // - Si PA-API NO está activada (aunque existan credenciales guardadas): usar scraping directamente.
-        $api_options = get_option('cosas_amazon_api_options', array());
+        $api_options = self::get_option_cached('cosas_amazon_api_options', array());
         $api_enabled = !empty($api_options['api_enabled']);
         $api_configured = !empty($api_options['amazon_access_key']) && !empty($api_options['amazon_secret_key']) && !empty($api_options['amazon_associate_tag']);
         $use_api = $api_enabled && $api_configured;
@@ -394,7 +481,7 @@ class CosasAmazonHelpers {
         
         // Si todo falla, usar datos de fallback neutrales (no simulados)
         if (!$product_data) {
-            $general_options = get_option('cosas_amazon_options', array());
+            $general_options = self::get_option_cached('cosas_amazon_options', array());
             $data_source = isset($general_options['data_source']) ? $general_options['data_source'] : 'real';
             
             if ($data_source === 'simulated') {
@@ -410,6 +497,8 @@ class CosasAmazonHelpers {
         // Guardar en caché si obtuvimos datos
         if ($product_data) {
             self::cache_product_data($asin, $product_data);
+            self::persist_cache_row($final_url, $product_data);
+            self::$product_cache[$url_key] = $product_data;
         }
         
         return $product_data;
@@ -2285,7 +2374,14 @@ class CosasAmazonHelpers {
             return $url; // No es URL corta, devolver la original
         }
         
-    self::log_debug("Intentando resolver URL corta: $url");
+        // Cachear resoluciones para evitar redirecciones repetidas
+        $cache_key = 'cosas_amazon_resolve_' . md5($url);
+        $cached = get_transient($cache_key);
+        if (!empty($cached)) {
+            return $cached;
+        }
+        
+        self::log_debug("Intentando resolver URL corta: $url");
 
         // Método 1: cURL con GET real y follow redirects (más compatible que HEAD)
         // Timeout reducido para mejor rendimiento
@@ -2320,6 +2416,7 @@ class CosasAmazonHelpers {
             self::log_debug("URL resuelta con cURL(GET): $final_url (HTTP: $http_code)", $curl_err ?: null);
 
             if (!empty($final_url) && $http_code >= 200 && $http_code < 400 && $final_url !== $url) {
+                set_transient($cache_key, $final_url, DAY_IN_SECONDS * 7);
                 return $final_url;
             }
 
@@ -2344,6 +2441,7 @@ class CosasAmazonHelpers {
             self::log_debug("URL resuelta con cURL(HEAD): $final_url (HTTP: $http_code)", $curl_err ?: null);
 
             if (!empty($final_url) && $http_code >= 200 && $http_code < 400 && $final_url !== $url) {
+                set_transient($cache_key, $final_url, DAY_IN_SECONDS * 7);
                 return $final_url;
             }
         }
@@ -2383,6 +2481,7 @@ class CosasAmazonHelpers {
                     $h = parse_url($current, PHP_URL_HOST);
                     if ($h && !in_array(strtolower($h), $short_domains)) {
                         self::log_debug("URL resuelta con WP HTTP API (HEAD): $current (HTTP: $code)");
+                        set_transient($cache_key, $current, DAY_IN_SECONDS * 7);
                         return $current;
                     }
                 }
@@ -2411,6 +2510,7 @@ class CosasAmazonHelpers {
                             $loc = rtrim($scheme . '://' . $host, '/') . '/' . ltrim($loc, '/');
                         }
                         self::log_debug("URL resuelta con WP HTTP API (GET): $loc (HTTP: $code)");
+                        set_transient($cache_key, $loc, DAY_IN_SECONDS * 7);
                         return $loc;
                     }
                 }
@@ -2439,6 +2539,7 @@ class CosasAmazonHelpers {
                 if (!empty($location)) {
                     $final_url = $location;
                     self::log_debug("URL resuelta con get_headers: $final_url");
+                    set_transient($cache_key, $final_url, DAY_IN_SECONDS * 7);
                     return $final_url;
                 }
             }
@@ -2456,7 +2557,8 @@ class CosasAmazonHelpers {
         }
         
         self::log_debug("No se pudo resolver URL corta: $url");
-        return false;
+        set_transient($cache_key, $url, DAY_IN_SECONDS);
+        return $url;
     }
     
     /**

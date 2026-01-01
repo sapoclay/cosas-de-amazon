@@ -26,8 +26,8 @@ class CosasAmazonPAAPI {
     // Circuit breaker properties
     private $circuit_breaker_failures = 0;
     private $circuit_breaker_last_failure = 0;
-    private $circuit_breaker_threshold = 5; // Failures antes de abrir el circuit
-    private $circuit_breaker_timeout = 300; // 5 minutos antes de reintentar
+    private $circuit_breaker_threshold = 3; // Failures antes de abrir el circuit
+    private $circuit_breaker_timeout = 1800; // 30 minutos antes de reintentar (reducir logs)
     
     public function __construct() {
         $options = get_option('cosas_amazon_api_options', array());
@@ -91,8 +91,16 @@ class CosasAmazonPAAPI {
 
     /**
      * Circuit Breaker: Verificar si debemos intentar una llamada
+     * Usa transients para persistir el estado entre peticiones
      */
     private function isCircuitOpen() {
+        // Cargar estado del circuit breaker desde transient
+        $cb_state = get_transient('cosas_amazon_paapi_circuit_breaker');
+        if ($cb_state) {
+            $this->circuit_breaker_failures = intval($cb_state['failures'] ?? 0);
+            $this->circuit_breaker_last_failure = intval($cb_state['last_failure'] ?? 0);
+        }
+        
         // Si no hemos alcanzado el threshold, el circuit está cerrado
         if ($this->circuit_breaker_failures < $this->circuit_breaker_threshold) {
             return false;
@@ -112,25 +120,35 @@ class CosasAmazonPAAPI {
     }
     
     /**
-     * Circuit Breaker: Registrar un fallo
+     * Circuit Breaker: Registrar un fallo (persistente con transients)
      */
     private function recordCircuitFailure() {
         $this->circuit_breaker_failures++;
         $this->circuit_breaker_last_failure = time();
+        
+        // Persistir estado en transient
+        set_transient('cosas_amazon_paapi_circuit_breaker', array(
+            'failures' => $this->circuit_breaker_failures,
+            'last_failure' => $this->circuit_breaker_last_failure
+        ), $this->circuit_breaker_timeout + 60);
+        
         $this->log('Circuit breaker: Registrando fallo #' . $this->circuit_breaker_failures);
         
         if ($this->circuit_breaker_failures >= $this->circuit_breaker_threshold) {
-            $this->log('Circuit breaker ABIERTO - Demasiados fallos (' . $this->circuit_breaker_failures . ')', true);
+            // Solo loguear si debug está activo, para evitar llenar error_log
+            $this->log('Circuit breaker ABIERTO - Demasiados fallos (' . $this->circuit_breaker_failures . '). Próximo intento en ' . ($this->circuit_breaker_timeout / 60) . ' minutos');
         }
     }
     
     /**
-     * Circuit Breaker: Registrar un éxito
+     * Circuit Breaker: Registrar un éxito (limpiar estado persistido)
      */
     private function recordCircuitSuccess() {
         if ($this->circuit_breaker_failures > 0) {
             $this->log('Circuit breaker: Éxito después de ' . $this->circuit_breaker_failures . ' fallos - Reset');
             $this->circuit_breaker_failures = 0;
+            // Limpiar transient
+            delete_transient('cosas_amazon_paapi_circuit_breaker');
         }
     }
     
@@ -386,7 +404,8 @@ class CosasAmazonPAAPI {
         }
         
         $this->last_error = $error_summary;
-        $this->log('Fallback multi-región completado - Falló en todas las regiones', true);
+        // No forzar log (true) para evitar llenar error_log cuando PA-API no funciona
+        $this->log('Fallback multi-región completado - Falló en todas las regiones');
         
         return false;
     }

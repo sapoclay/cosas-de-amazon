@@ -2,6 +2,12 @@
 // Clase principal del plugin CosasDeAmazon
 
 class CosasDeAmazon {
+    /** Impide registrar hooks múltiples si se instancia dos veces. */
+    private static $bootstrapped = false;
+    /** Cache local de opciones para evitar lecturas repetidas de BD. */
+    private static $options_cache = array();
+    /** Cache de existencia de la tabla de caché. */
+    private static $cache_table_exists = null;
     
     // Control de debug - solo loguea si está definida la constante COSAS_AMAZON_DEBUG
     private static function debug_log($message) {
@@ -9,8 +15,22 @@ class CosasDeAmazon {
             error_log('[CosasDeAmazon] ' . $message);
         }
     }
+
+    /** Obtener opción con caché local. */
+    private function get_option_cached($name, $default = array()) {
+        if (array_key_exists($name, self::$options_cache)) {
+            return self::$options_cache[$name];
+        }
+        $value = get_option($name, $default);
+        self::$options_cache[$name] = $value;
+        return $value;
+    }
     
     public function __construct() {
+        if (self::$bootstrapped) {
+            return;
+        }
+        self::$bootstrapped = true;
         add_action('init', array($this, 'init'));
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_editor_assets'));
@@ -18,8 +38,8 @@ class CosasDeAmazon {
         add_action('wp_ajax_cosas_amazon_clear_cache', array($this, 'ajax_clear_cache'));
         add_action('wp_ajax_cosas_amazon_cache_stats', array($this, 'ajax_cache_stats'));
         // Cron para actualización automática de precios
-    add_action('cosas_amazon_daily_price_update', array($this, 'daily_price_update'), 10, 1);
-    add_action('cosas_amazon_force_price_update', array($this, 'daily_price_update'), 10, 1);
+        add_action('cosas_amazon_daily_price_update', array($this, 'daily_price_update'), 10, 1);
+        add_action('cosas_amazon_force_price_update', array($this, 'daily_price_update'), 10, 1);
     }
 
     /**
@@ -254,8 +274,11 @@ class CosasDeAmazon {
         $prev = $wpdb->suppress_errors();
         $wpdb->suppress_errors(true);
         try {
-            $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
-            if ($exists !== $table) { return; }
+            if (self::$cache_table_exists === null) {
+                $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+                self::$cache_table_exists = ($exists === $table);
+            }
+            if (!self::$cache_table_exists) { return; }
             $json = wp_json_encode($product_data);
             if ($json === null) { $json = json_encode($product_data); }
             $wpdb->query(
@@ -275,7 +298,7 @@ class CosasDeAmazon {
     /** Determina si deben ocultarse placeholders en frontend (por defecto sí). */
     private function should_hide_placeholder_on_frontend() {
         if (is_admin()) return false;
-        $opts = get_option('cosas_amazon_options', array());
+        $opts = $this->get_option_cached('cosas_amazon_options', array());
         return isset($opts['hide_placeholder_on_frontend']) ? (bool)$opts['hide_placeholder_on_frontend'] : true;
     }
 
@@ -295,7 +318,7 @@ class CosasDeAmazon {
      * Obtener valores por defecto desde la configuración del plugin
      */
     private function get_default_attributes() {
-        $options = get_option('cosas_amazon_options', array());
+        $options = $this->get_option_cached('cosas_amazon_options', array());
         
         return array(
             'displayStyle' => isset($options['default_style']) ? $options['default_style'] : 'horizontal',
@@ -444,6 +467,9 @@ class CosasDeAmazon {
             return;
         }
         
+        // Preconnect a Amazon para acelerar carga de imágenes
+        add_action('wp_head', array($this, 'add_amazon_preconnect'), 1);
+        
         // Usar versión del plugin para caché (time() solo en debug)
         $asset_version = COSAS_AMAZON_VERSION;
         if (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) {
@@ -460,7 +486,7 @@ class CosasDeAmazon {
         wp_enqueue_script(
             'cosas-amazon-frontend',
             COSAS_AMAZON_PLUGIN_URL . 'assets/js/frontend.js',
-            array('jquery'),
+            array(),
             $asset_version,
             true
         );
@@ -468,7 +494,7 @@ class CosasDeAmazon {
         wp_enqueue_script(
             'cosas-amazon-carousel',
             COSAS_AMAZON_PLUGIN_URL . 'assets/js/carousel.js',
-            array('jquery'),
+            array(),
             $asset_version,
             true
         );
@@ -483,6 +509,29 @@ class CosasDeAmazon {
 
         // Reforzar las clases de efectos en el frontend por si el tema las anula
         add_action('wp_head', array($this, 'inject_effects_reinforce_css'), 99);
+        
+        // Marcar scripts como defer para no bloquear render
+        add_filter('script_loader_tag', array($this, 'add_defer_to_scripts'), 10, 2);
+    }
+    
+    /**
+     * Añadir preconnect a dominios de Amazon para acelerar carga de imágenes
+     */
+    public function add_amazon_preconnect() {
+        echo '<link rel="preconnect" href="https://m.media-amazon.com" crossorigin>' . "\n";
+        echo '<link rel="preconnect" href="https://images-na.ssl-images-amazon.com" crossorigin>' . "\n";
+        echo '<link rel="dns-prefetch" href="https://www.amazon.es">' . "\n";
+    }
+    
+    /**
+     * Añadir defer a scripts del plugin para no bloquear el render
+     */
+    public function add_defer_to_scripts($tag, $handle) {
+        $defer_handles = array('cosas-amazon-frontend', 'cosas-amazon-carousel', 'cosas-amazon-tracking');
+        if (in_array($handle, $defer_handles)) {
+            return str_replace(' src', ' defer src', $tag);
+        }
+        return $tag;
     }
 
     /**
@@ -618,7 +667,7 @@ class CosasDeAmazon {
      * Función para inyectar CSS personalizado en el editor de bloques
      */
     private function inject_custom_css_in_editor() {
-        $custom_css = get_option('cosas_amazon_custom_css', '');
+        $custom_css = $this->get_option_cached('cosas_amazon_custom_css', '');
         if (!empty($custom_css)) {
             wp_add_inline_style(
                 'cosas-amazon-block-editor-style',
@@ -840,7 +889,7 @@ class CosasDeAmazon {
         }
         
         // Verificar configuración de producción
-        $production_config = get_option('cosas_amazon_production_config', []);
+        $production_config = $this->get_option_cached('cosas_amazon_production_config', []);
         $force_button_display = !empty($production_config['force_button_display']);
         
         // Lista de atributos que deben aplicar configuración global si no se han modificado
@@ -875,7 +924,7 @@ class CosasDeAmazon {
         }
         
         // GARANTÍA DE BOTÓN EN PRODUCCIÓN: Asegurar que showButton esté siempre true en producción
-        $options = get_option('cosas_amazon_options', []);
+        $options = $this->get_option_cached('cosas_amazon_options', []);
         $default_show_button = isset($options['show_button_by_default']) ? $options['show_button_by_default'] : true;
         
         // Si no está definido o está vacío, forzar a true
@@ -2354,5 +2403,69 @@ class CosasDeAmazon {
             }
             return '';
         }
+    }
+    
+    /**
+     * AJAX handler para limpiar caché
+     */
+    public function ajax_clear_cache() {
+        check_ajax_referer('cosas_amazon_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Permisos insuficientes'));
+            return;
+        }
+        
+        global $wpdb;
+        
+        // Limpiar transients del plugin
+        $wpdb->query(
+            "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_cosas_amazon_product_%' OR option_name LIKE '_transient_timeout_cosas_amazon_product_%'"
+        );
+        $cleared = $wpdb->rows_affected;
+        
+        // Limpiar tabla de caché si existe
+        $table_name = $wpdb->prefix . 'cosas_amazon_cache';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name) {
+            $wpdb->query("TRUNCATE TABLE $table_name");
+        }
+        
+        wp_send_json_success(array(
+            'message' => 'Caché limpiada correctamente',
+            'cleared' => $cleared
+        ));
+    }
+    
+    /**
+     * AJAX handler para obtener estadísticas de caché
+     */
+    public function ajax_cache_stats() {
+        check_ajax_referer('cosas_amazon_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Permisos insuficientes'));
+            return;
+        }
+        
+        global $wpdb;
+        
+        // Contar transients
+        $transient_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE '_transient_cosas_amazon_product_%' AND option_name NOT LIKE '_transient_timeout_%'"
+        );
+        
+        // Estadísticas de tabla
+        $table_name = $wpdb->prefix . 'cosas_amazon_cache';
+        $table_count = 0;
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name) {
+            $table_count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+        }
+        
+        wp_send_json_success(array(
+            'transients' => intval($transient_count),
+            'table' => intval($table_count),
+            'total' => intval($transient_count) + intval($table_count)
+        ));
     }
 }
