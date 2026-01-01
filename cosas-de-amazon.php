@@ -27,6 +27,13 @@ if (!defined('COSAS_AMAZON_DEBUG')) {
     define('COSAS_AMAZON_DEBUG', $debug_enabled);
 }
 
+// Función helper para debug logging - solo loguea si COSAS_AMAZON_DEBUG está activo
+function cosas_amazon_debug($message) {
+    if (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) {
+        error_log('[CosasAmazon] ' . $message);
+    }
+}
+
 // Cargar traducciones del plugin
 add_action('plugins_loaded', function() {
     load_plugin_textdomain('cosas-de-amazon', false, dirname(plugin_basename(__FILE__)) . '/languages');
@@ -143,10 +150,10 @@ function cosas_amazon_handle_daily_price_update($args = array()) {
         update_option('cosas_amazon_last_update', $stats);
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('[CosasDeAmazon][cron] Actualización de precios completada: ' . json_encode($stats));
+            cosas_amazon_debug('Actualización de precios completada: ' . json_encode($stats));
         }
     } catch (\Throwable $e) {
-        error_log('[CosasDeAmazon][cron] Error en actualización de precios: ' . $e->getMessage());
+        cosas_amazon_debug('Error en actualización de precios: ' . $e->getMessage());
     }
 }
 // Registrar el hook ANTES de 'init' para asegurar que esté disponible para el cron
@@ -176,7 +183,7 @@ add_action('plugins_loaded', function() {
     if (is_admin() && class_exists('CosasAmazonAdmin')) {
         if (!isset($GLOBALS['cosas_amazon_admin_instance'])) {
             $GLOBALS['cosas_amazon_admin_instance'] = new CosasAmazonAdmin();
-            error_log('[COSAS_AMAZON_DEBUG] Admin instance creada en plugins_loaded');
+            cosas_amazon_debug('Admin instance creada en plugins_loaded');
         }
     }
 }, 1);
@@ -296,12 +303,12 @@ function cosas_amazon_activate() {
     if (class_exists('CosasAmazonAdmin')) {
         $admin_instance = new CosasAmazonAdmin();
         $GLOBALS['cosas_amazon_admin_instance'] = $admin_instance;
-        error_log('[COSAS_AMAZON_DEBUG] Admin instance creada durante activación');
+        cosas_amazon_debug('Admin instance creada durante activación');
         
         // Forzar que los hooks de admin_menu se ejecuten inmediatamente
         if (method_exists($admin_instance, 'add_admin_menu')) {
             $admin_instance->add_admin_menu();
-            error_log('[COSAS_AMAZON_DEBUG] Menús admin forzados durante activación');
+            cosas_amazon_debug('Menús admin forzados durante activación');
         }
     }
     
@@ -313,7 +320,7 @@ function cosas_amazon_activate() {
         cosas_amazon_restore_blocks_on_activate();
     }
     
-    error_log('[COSAS_AMAZON_DEBUG] Plugin activado completamente');
+    cosas_amazon_debug('Plugin activado completamente');
 }
 
 function cosas_amazon_deactivate() {
@@ -405,7 +412,7 @@ function cda_test_callback($request) {
 }
 
 function cda_fetch_product_data_callback($request) {
-    error_log('[COSAS_AMAZON_DEBUG] === ENDPOINT REST LLAMADO ===');
+    cosas_amazon_debug('=== ENDPOINT REST LLAMADO ===');
     
     $body = $request->get_json_params();
     $url_from_body = isset($body['url']) ? $body['url'] : '';
@@ -414,10 +421,10 @@ function cda_fetch_product_data_callback($request) {
     $url = !empty($url_from_body) ? $url_from_body : $url_from_param;
     $url = esc_url_raw($url);
     
-    error_log('[COSAS_AMAZON_DEBUG] URL recibida: ' . $url);
+    cosas_amazon_debug('URL recibida: ' . $url);
     
     if (empty($url)) {
-        error_log('[COSAS_AMAZON_DEBUG] Error: URL vacía');
+        cosas_amazon_debug('Error: URL vacía');
         return new WP_Error('no_url', 'No URL provided', array('status' => 400));
     }
 
@@ -426,28 +433,28 @@ function cda_fetch_product_data_callback($request) {
     }
     
     $is_amazon = CosasAmazonHelpers::is_amazon_url($url);
-    error_log('[COSAS_AMAZON_DEBUG] ¿Es URL de Amazon?: ' . ($is_amazon ? 'SÍ' : 'NO'));
+    cosas_amazon_debug('¿Es URL de Amazon?: ' . ($is_amazon ? 'SÍ' : 'NO'));
     
     if (!$is_amazon) {
-        error_log('[COSAS_AMAZON_DEBUG] Error: URL no es de Amazon');
+        cosas_amazon_debug('Error: URL no es de Amazon');
         return new WP_Error('invalid_url', 'URL is not a valid Amazon URL', array('status' => 400));
     }
 
     // Forzar obtener datos reales
     $force_refresh = isset($body['force_refresh']) ? $body['force_refresh'] : false;
     
-    error_log('[COSAS_AMAZON_DEBUG] Llamando a get_product_data con force_refresh=' . ($force_refresh ? 'true' : 'false'));
+    cosas_amazon_debug('Llamando a get_product_data con force_refresh=' . ($force_refresh ? 'true' : 'false'));
     
     $product_data = CosasAmazonHelpers::get_product_data($url, $force_refresh);
     
-    error_log('[COSAS_AMAZON_DEBUG] Datos obtenidos: ' . print_r($product_data, true));
+    cosas_amazon_debug('Datos obtenidos: ' . print_r($product_data, true));
     
     if (!$product_data || empty($product_data['title'])) {
-        error_log('[COSAS_AMAZON_DEBUG] Error: No se pudieron obtener datos o título vacío');
+        cosas_amazon_debug('Error: No se pudieron obtener datos o título vacío');
         return new WP_Error('not_found', 'No se pudieron obtener datos del producto', array('status' => 404));
     }
 
-    error_log('[COSAS_AMAZON_DEBUG] Retornando datos exitosamente');
-    error_log('[COSAS_AMAZON_DEBUG] === FIN ENDPOINT REST ===');
+    cosas_amazon_debug('Retornando datos exitosamente');
+    cosas_amazon_debug('=== FIN ENDPOINT REST ===');
     return rest_ensure_response($product_data);
 }

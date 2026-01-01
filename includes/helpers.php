@@ -1,4 +1,4 @@
-0<?php
+<?php
 /**
  * Funciones helper del plugin Cosas de Amazon
  */
@@ -582,9 +582,9 @@ class CosasAmazonHelpers {
         self::log_debug('URL a scrapear: ' . $url);
         self::log_debug('ASIN: ' . $asin);
         
-        // Obtener configuración de timeout
+        // Obtener configuración de timeout (reducido para mejor rendimiento)
         $options = get_option('cosas_amazon_options', array());
-        $timeout = isset($options['scraping_timeout']) ? intval($options['scraping_timeout']) : 15;
+        $timeout = isset($options['scraping_timeout']) ? min(intval($options['scraping_timeout']), 15) : 10;
         
         self::log_debug('Timeout configurado: ' . $timeout . ' segundos');
         
@@ -629,11 +629,9 @@ class CosasAmazonHelpers {
             'DNT: 1'
         );
         
-        // Delay inicial REDUCIDO para no hacer esperar tanto al usuario (1-2 segundos)
-        // Solo si detectamos bloqueo haremos delays más largos en los reintentos
-        $initial_delay = rand(1, 2);
-        self::log_debug("Esperando {$initial_delay}s antes de hacer la petición...");
-        sleep($initial_delay);
+        // Delay inicial ELIMINADO - Solo usamos delays en reintentos cuando hay bloqueo
+        // Esto mejora significativamente el tiempo de carga inicial
+        // Los reintentos con delay solo se ejecutan si la primera petición falla
         
         $html = '';
         $http_code = 0;
@@ -722,13 +720,13 @@ class CosasAmazonHelpers {
                 self::log_debug("HTML no comprimido: " . strlen($html) . " bytes");
             }
             
-            // Si el HTML es muy pequeño, puede ser bloqueo de Amazon - reintentar con estrategia diferente
+            // Si el HTML es muy pequeño, puede ser bloqueo de Amazon - hacer UN solo reintento rápido
             if (strlen($html) < 100000) {
                 self::log_debug("HTML pequeño detectado (" . strlen($html) . " bytes), posible bloqueo de Amazon");
                 
-                // Estrategia 1: Esperar más tiempo y usar User-Agent completamente diferente
-                self::log_debug("Reintento 1/3: Esperando 5 segundos y cambiando a Firefox...");
-                sleep(5);
+                // Un solo reintento con User-Agent diferente y delay mínimo (2s)
+                self::log_debug("Reintento único: Esperando 2 segundos y cambiando User-Agent...");
+                sleep(2);
                 
                 $firefox_headers = array(
                     'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
@@ -749,7 +747,7 @@ class CosasAmazonHelpers {
                 curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
                 curl_setopt($ch2, CURLOPT_MAXREDIRS, 5);
-                curl_setopt($ch2, CURLOPT_TIMEOUT, $timeout + 5);
+                curl_setopt($ch2, CURLOPT_TIMEOUT, $timeout);
                 curl_setopt($ch2, CURLOPT_HTTPHEADER, $firefox_headers);
                 curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
                 curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
@@ -759,91 +757,13 @@ class CosasAmazonHelpers {
                 $http_code2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
                 curl_close($ch2);
                 
-                if ($html2 && strlen($html2) > strlen($html) && strlen($html2) > 100000) {
+                if ($html2 && strlen($html2) > strlen($html)) {
                     $html = $html2;
                     $http_code = $http_code2;
-                    self::log_debug("✅ Reintento 1 exitoso, HTML mejorado: " . strlen($html) . " bytes");
+                    self::log_debug("✅ Reintento exitoso, HTML mejorado: " . strlen($html) . " bytes");
                 } else {
-                    self::log_debug("❌ Reintento 1 falló: " . strlen($html2) . " bytes");
-                    
-                    // Estrategia 2: Safari en macOS
-                    self::log_debug("Reintento 2/3: Esperando 7 segundos y cambiando a Safari...");
-                    sleep(7);
-                    
-                    $safari_headers = array(
-                        'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 15_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
-                        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                        'Accept-Language: es-ES,es;q=0.9',
-                        'Accept-Encoding: gzip, deflate, br',
-                        'Connection: keep-alive',
-                        'Upgrade-Insecure-Requests: 1'
-                    );
-                    
-                    $ch3 = curl_init();
-                    curl_setopt($ch3, CURLOPT_URL, $url);
-                    curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch3, CURLOPT_FOLLOWLOCATION, true);
-                    curl_setopt($ch3, CURLOPT_MAXREDIRS, 5);
-                    curl_setopt($ch3, CURLOPT_TIMEOUT, $timeout + 10);
-                    curl_setopt($ch3, CURLOPT_HTTPHEADER, $safari_headers);
-                    curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, false);
-                    curl_setopt($ch3, CURLOPT_SSL_VERIFYHOST, false);
-                    curl_setopt($ch3, CURLOPT_ENCODING, '');
-                    
-                    $html3 = curl_exec($ch3);
-                    $http_code3 = curl_getinfo($ch3, CURLINFO_HTTP_CODE);
-                    curl_close($ch3);
-                    
-                    if ($html3 && strlen($html3) > strlen($html) && strlen($html3) > 100000) {
-                        $html = $html3;
-                        $http_code = $http_code3;
-                        self::log_debug("✅ Reintento 2 exitoso, HTML mejorado: " . strlen($html) . " bytes");
-                    } else {
-                        self::log_debug("❌ Reintento 2 falló: " . strlen($html3) . " bytes");
-                        
-                        // Estrategia 3: Edge con delay aún mayor
-                        self::log_debug("Reintento 3/3: Esperando 10 segundos y cambiando a Edge...");
-                        sleep(10);
-                        
-                        $edge_headers = array(
-                            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
-                            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                            'Accept-Language: es-ES,es;q=0.9,en;q=0.8',
-                            'Accept-Encoding: gzip, deflate, br',
-                            'Connection: keep-alive',
-                            'Upgrade-Insecure-Requests: 1',
-                            'Sec-Fetch-Dest: document',
-                            'Sec-Fetch-Mode: navigate',
-                            'Sec-Fetch-Site: none',
-                            'Sec-Fetch-User: ?1'
-                        );
-                        
-                        $ch4 = curl_init();
-                        curl_setopt($ch4, CURLOPT_URL, $url);
-                        curl_setopt($ch4, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ch4, CURLOPT_FOLLOWLOCATION, true);
-                        curl_setopt($ch4, CURLOPT_MAXREDIRS, 5);
-                        curl_setopt($ch4, CURLOPT_TIMEOUT, $timeout + 15);
-                        curl_setopt($ch4, CURLOPT_HTTPHEADER, $edge_headers);
-                        curl_setopt($ch4, CURLOPT_SSL_VERIFYPEER, false);
-                        curl_setopt($ch4, CURLOPT_SSL_VERIFYHOST, false);
-                        curl_setopt($ch4, CURLOPT_ENCODING, '');
-                        
-                        $html4 = curl_exec($ch4);
-                        $http_code4 = curl_getinfo($ch4, CURLINFO_HTTP_CODE);
-                        curl_close($ch4);
-                        
-                        if ($html4 && strlen($html4) > strlen($html)) {
-                            $html = $html4;
-                            $http_code = $http_code4;
-                            self::log_debug("✅ Reintento 3 exitoso, HTML final: " . strlen($html) . " bytes");
-                        } else {
-                            self::log_debug("❌ Todos los reintentos fallaron. Amazon está bloqueando todas las peticiones.");
-                            self::log_debug("🔒 BLOQUEO DETECTADO: Amazon ha bloqueado tu IP temporalmente.");
-                            self::log_debug("💡 SOLUCIONES: 1) Esperar 24-48h, 2) Cambiar IP/VPN, 3) Configurar Amazon PA-API");
-                            self::log_debug("ℹ️  Los datos se mostrarán con enlace directo a Amazon para que el usuario los vea allí.");
-                        }
-                    }
+                    self::log_debug("❌ Reintento falló. Se usarán datos de caché o fallback.");
+                    self::log_debug("💡 SOLUCIÓN: Configurar Amazon PA-API para evitar bloqueos");
                 }
             }
         }
@@ -2368,13 +2288,14 @@ class CosasAmazonHelpers {
     self::log_debug("Intentando resolver URL corta: $url");
 
         // Método 1: cURL con GET real y follow redirects (más compatible que HEAD)
+        // Timeout reducido para mejor rendimiento
         if (function_exists('curl_init')) {
             $curl = curl_init();
             curl_setopt($curl, CURLOPT_URL, $url);
             curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt($curl, CURLOPT_MAXREDIRS, 10);
-            curl_setopt($curl, CURLOPT_TIMEOUT, 20);
+            curl_setopt($curl, CURLOPT_TIMEOUT, 8);
             curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
@@ -2402,13 +2323,13 @@ class CosasAmazonHelpers {
                 return $final_url;
             }
 
-            // Si GET no funcionó, intentar HEAD como fallback
+            // Si GET no funcionó, intentar HEAD como fallback (timeout más corto)
             $curl = curl_init();
             curl_setopt($curl, CURLOPT_URL, $url);
             curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt($curl, CURLOPT_MAXREDIRS, 10);
-            curl_setopt($curl, CURLOPT_TIMEOUT, 20);
+            curl_setopt($curl, CURLOPT_TIMEOUT, 5);
             curl_setopt($curl, CURLOPT_NOBODY, true);
             curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);

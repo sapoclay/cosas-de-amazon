@@ -2,6 +2,14 @@
 // Clase principal del plugin CosasDeAmazon
 
 class CosasDeAmazon {
+    
+    // Control de debug - solo loguea si está definida la constante COSAS_AMAZON_DEBUG
+    private static function debug_log($message) {
+        if (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) {
+            error_log('[CosasDeAmazon] ' . $message);
+        }
+    }
+    
     public function __construct() {
         add_action('init', array($this, 'init'));
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
@@ -24,7 +32,7 @@ class CosasDeAmazon {
             $stats = self::run_bulk_price_refresh($args);
             update_option('cosas_amazon_last_update', $stats);
         } catch (\Throwable $e) {
-            error_log('[CosasDeAmazon][daily_price_update] ' . $e->getMessage());
+            self::debug_log('[daily_price_update] ' . $e->getMessage());
         }
     }
 
@@ -58,12 +66,12 @@ class CosasDeAmazon {
         }
         $urls = array_values(array_unique(array_filter(array_map('trim', $urls))));
         
-        error_log('[CosasDeAmazon][bulk_refresh] Iniciando actualización - URLs encontradas: ' . count($urls));
+        self::debug_log('[bulk_refresh] Iniciando actualización - URLs encontradas: ' . count($urls));
 
         $limit = intval($args['limit']);
         if ($limit > 0 && count($urls) > $limit) {
             $urls = array_slice($urls, 0, $limit);
-            error_log('[CosasDeAmazon][bulk_refresh] Limitando a ' . $limit . ' URLs');
+            self::debug_log('[bulk_refresh] Limitando a ' . $limit . ' URLs');
         }
 
         $stats = array(
@@ -81,11 +89,9 @@ class CosasDeAmazon {
             try {
                 if (!CosasAmazonHelpers::is_amazon_url($url)) {
                     $stats['skipped']++;
-                    error_log('[CosasDeAmazon][bulk_refresh] URL omitida (no es Amazon): ' . $url);
+                    self::debug_log('[bulk_refresh] URL omitida (no es Amazon): ' . $url);
                     continue;
                 }
-                
-                error_log('[CosasDeAmazon][bulk_refresh] Procesando (' . $stats['processed'] . '/' . count($urls) . '): ' . $url);
                 
                 // Forzar actualización (force_refresh = true limpia el caché primero)
                 $data = CosasAmazonHelpers::get_product_data($url, true);
@@ -100,15 +106,13 @@ class CosasDeAmazon {
                         'title' => isset($data['title']) ? substr($data['title'], 0, 50) : 'N/A',
                         'price' => isset($data['price']) ? $data['price'] : 'N/A',
                     );
-                    
-                    error_log('[CosasDeAmazon][bulk_refresh] ✅ Actualizado: ' . (isset($data['title']) ? substr($data['title'], 0, 40) : $url) . ' - Precio: ' . (isset($data['price']) ? $data['price'] : 'N/A'));
                 } else {
                     $stats['errors']++;
-                    error_log('[CosasDeAmazon][bulk_refresh] ❌ Error obteniendo datos para: ' . $url);
+                    self::debug_log('[bulk_refresh] Error obteniendo datos para: ' . $url);
                 }
             } catch (\Throwable $e) {
                 $stats['errors']++;
-                error_log('[CosasDeAmazon][bulk_refresh] ❌ Excepción: ' . $e->getMessage() . ' para URL: ' . $url);
+                self::debug_log('[bulk_refresh] Excepción: ' . $e->getMessage() . ' para URL: ' . $url);
             }
             if ($args['sleep'] > 0) {
                 sleep(intval($args['sleep']));
@@ -118,7 +122,7 @@ class CosasDeAmazon {
         $stats['finished_at'] = current_time('mysql');
         $stats['duration_sec'] = round(microtime(true) - $start, 2);
         
-        error_log('[CosasDeAmazon][bulk_refresh] Finalizado - Procesados: ' . $stats['processed'] . ', Éxitos: ' . $stats['success'] . ', Errores: ' . $stats['errors'] . ', Tiempo: ' . $stats['duration_sec'] . 's');
+        self::debug_log('[bulk_refresh] Finalizado - Procesados: ' . $stats['processed'] . ', Éxitos: ' . $stats['success'] . ', Errores: ' . $stats['errors'] . ', Tiempo: ' . $stats['duration_sec'] . 's');
         
         return $stats;
     }
@@ -342,6 +346,43 @@ class CosasDeAmazon {
         return $price;
     }
 
+    /**
+     * Verificar si la página actual tiene bloques de Amazon
+     * para evitar cargar assets innecesariamente
+     */
+    private function page_has_amazon_blocks() {
+        global $post;
+        
+        // En admin siempre cargar
+        if (is_admin()) {
+            return true;
+        }
+        
+        // Si no hay post, no cargar
+        if (!$post || !is_singular()) {
+            return false;
+        }
+        
+        // Verificar si tiene nuestro bloque o shortcode
+        $content = $post->post_content ?? '';
+        if (empty($content)) {
+            return false;
+        }
+        
+        // Verificar bloque Gutenberg
+        if (has_block('cosas-amazon/producto-amazon', $post)) {
+            return true;
+        }
+        
+        // Verificar shortcodes
+        if (strpos($content, '[amazon_producto') !== false || 
+            strpos($content, '[cosas-amazon') !== false) {
+            return true;
+        }
+        
+        return false;
+    }
+
     public function init() {
         // Obtener valores por defecto desde la configuración
         $defaults = $this->get_default_attributes();
@@ -398,8 +439,16 @@ class CosasDeAmazon {
     }
 
     public function enqueue_frontend_assets() {
-        // Bust de caché agresivo para asegurar que los cambios de CSS/JS se vean
-        $asset_version = COSAS_AMAZON_VERSION . '-' . time();
+        // Solo cargar assets si hay bloques de Amazon en la página
+        if (!$this->page_has_amazon_blocks()) {
+            return;
+        }
+        
+        // Usar versión del plugin para caché (time() solo en debug)
+        $asset_version = COSAS_AMAZON_VERSION;
+        if (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) {
+            $asset_version .= '-' . time();
+        }
         
         wp_enqueue_style(
             'cosas-amazon-block-style',
@@ -439,9 +488,14 @@ class CosasDeAmazon {
     /**
      * CSS inline con alta prioridad para asegurar que las clases `.cda-*` prevalezcan
      * frente a resets agresivos de algunos temas o cachés que alteran el orden.
+     * OPTIMIZADO: Solo se inyecta si hay productos de Amazon en la página
      */
     public function inject_effects_reinforce_css() {
         if (is_admin()) return;
+        
+        // Verificar que realmente hay productos antes de inyectar CSS
+        if (!$this->page_has_amazon_blocks()) return;
+        
         $opts = get_option('cosas_amazon_options', array());
         // Permitir configurar colores del gradiente desde opciones si existen
         $grad_start = isset($opts['gradient_start']) ? trim($opts['gradient_start']) : '';
@@ -493,11 +547,17 @@ class CosasDeAmazon {
     }
 
     public function enqueue_block_editor_assets() {
+        // Usar versión del plugin (time() solo en modo debug)
+        $editor_version = COSAS_AMAZON_VERSION;
+        if (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) {
+            $editor_version .= '-' . time();
+        }
+        
         wp_enqueue_script(
             'cosas-amazon-block-editor',
             COSAS_AMAZON_PLUGIN_URL . 'assets/js/block.js',
             array('wp-blocks', 'wp-i18n', 'wp-element', 'wp-components', 'wp-block-editor', 'wp-api-fetch'),
-            COSAS_AMAZON_VERSION . '-' . time(), // Forzar recarga JS también
+            $editor_version,
             true
         );
         // Encolar el JS del carrusel también en el editor para vista previa funcional
@@ -505,7 +565,7 @@ class CosasDeAmazon {
             'cosas-amazon-carousel',
             COSAS_AMAZON_PLUGIN_URL . 'assets/js/carousel.js',
             array('jquery'),
-            COSAS_AMAZON_VERSION . '-' . time(),
+            $editor_version,
             true
         );
         $plugin_options = get_option('cosas_amazon_options', array());
@@ -538,7 +598,7 @@ class CosasDeAmazon {
             'cosas-amazon-block-editor-style',
             COSAS_AMAZON_PLUGIN_URL . 'assets/css/editor.css',
             array('wp-edit-blocks', 'wp-block-editor', 'wp-block-library'),
-            COSAS_AMAZON_VERSION . '-' . time(), // Forzar recarga con timestamp
+            $editor_version,
             'all'
         );
         // Cargar también el CSS del frontend en el editor para que coincidan los estilos visuales
@@ -546,7 +606,7 @@ class CosasDeAmazon {
             'cosas-amazon-block-style',
             COSAS_AMAZON_PLUGIN_URL . 'assets/css/style.css',
             array('cosas-amazon-block-editor-style'),
-            COSAS_AMAZON_VERSION . '-' . time(),
+            $editor_version,
             'all'
         );
         
@@ -652,14 +712,14 @@ class CosasDeAmazon {
             if (is_array($amazon_urls) && count($amazon_urls) > $max_urls) {
                 $amazon_urls = array_slice($amazon_urls, 0, $max_urls);
                 $merged_attributes['amazonUrls'] = $amazon_urls;
-                error_log(strtoupper($block_size) . ' ' . strtoupper($display_style) . ': Limitando URLs adicionales a ' . $max_urls . ' máximo (' . ($max_urls + 1) . ' productos total)');
+                self::debug_log(strtoupper($block_size) . ' ' . strtoupper($display_style) . ': Limitando URLs adicionales a ' . $max_urls . ' máximo (' . ($max_urls + 1) . ' productos total)');
             }
             
             // Limitar productos por fila según el tamaño
             if ($products_per_row > $max_products) {
                 $products_per_row = $max_products;
                 $merged_attributes['productsPerRow'] = $max_products;
-                error_log(strtoupper($block_size) . ' ' . strtoupper($display_style) . ': Limitando productos por fila a ' . $max_products . ' máximo');
+                self::debug_log(strtoupper($block_size) . ' ' . strtoupper($display_style) . ': Limitando productos por fila a ' . $max_products . ' máximo');
             }
         }
         
@@ -1309,7 +1369,7 @@ class CosasDeAmazon {
         try {
             return $this->render_amazon_product_block($attributes);
         } catch (\Throwable $e) {
-            error_log('[CosasDeAmazon][render_block] ' . $e->getMessage());
+            self::debug_log('[render_block] ' . $e->getMessage());
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 return '<div class="cosas-amazon-error">Error renderizando bloque: ' . esc_html($e->getMessage()) . '</div>';
             }
@@ -2288,7 +2348,7 @@ class CosasDeAmazon {
             // Usar la misma función de renderizado que el bloque
             return $this->render_amazon_product_block($block_attributes);
         } catch (\Throwable $e) {
-            error_log('[CosasDeAmazon][shortcode] ' . $e->getMessage());
+            self::debug_log('[shortcode] ' . $e->getMessage());
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 return '<div class="cosas-amazon-error">Error en shortcode: ' . esc_html($e->getMessage()) . '</div>';
             }

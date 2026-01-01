@@ -2,10 +2,14 @@
 
 class CosasAmazonAdmin {
     
+    // Control de debug - solo loguea si está definida la constante COSAS_AMAZON_DEBUG
+    private function debug_log($message) {
+        if (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) {
+            error_log('[COSAS_AMAZON_DEBUG] ' . $message);
+        }
+    }
+    
     public function __construct() {
-        // Debug: verificar que la clase se inicializa
-        error_log('[COSAS_AMAZON_DEBUG] CosasAmazonAdmin inicializada');
-        
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'admin_init'));
         add_filter('plugin_action_links_' . plugin_basename(COSAS_AMAZON_PLUGIN_PATH . 'cosas-de-amazon.php'), array($this, 'add_action_links'));
@@ -443,7 +447,7 @@ class CosasAmazonAdmin {
         }
         
         // Debug: ver qué hook se está ejecutando
-        error_log('[COSAS_AMAZON_DEBUG] Hook actual: ' . $hook);
+        $this->debug_log('Hook actual: ' . $hook);
         
         // Enqueue jQuery para las funcionalidades interactivas
         wp_enqueue_script('jquery');
@@ -989,18 +993,18 @@ class CosasAmazonAdmin {
     public function add_admin_menu() {
         static $menus_already_registered = false;
         if ($menus_already_registered) {
-            error_log('[COSAS_AMAZON_DEBUG] ⏭️ add_admin_menu ignorada (ya registrado en esta petición)');
+            $this->debug_log('⏭️ add_admin_menu ignorada (ya registrado en esta petición)');
             return;
         }
         $menus_already_registered = true;
 
-        error_log('[COSAS_AMAZON_DEBUG] add_admin_menu llamada');
-        error_log('[COSAS_AMAZON_DEBUG] current_user_can(manage_options): ' . (current_user_can('manage_options') ? 'true' : 'false'));
-        error_log('[COSAS_AMAZON_DEBUG] is_admin(): ' . (is_admin() ? 'true' : 'false'));
+        $this->debug_log('add_admin_menu llamada');
+        $this->debug_log('current_user_can(manage_options): ' . (current_user_can('manage_options') ? 'true' : 'false'));
+        $this->debug_log('is_admin(): ' . (is_admin() ? 'true' : 'false'));
         
         // Verificar permisos antes de registrar
         if (!current_user_can('manage_options')) {
-            error_log('[COSAS_AMAZON_DEBUG] ❌ Usuario sin permisos manage_options');
+            $this->debug_log('❌ Usuario sin permisos manage_options');
             return;
         }
         
@@ -1016,12 +1020,12 @@ class CosasAmazonAdmin {
         );
         
         if ($main_page) {
-            error_log('[COSAS_AMAZON_DEBUG] ✅ Menú principal registrado: ' . $main_page);
+            $this->debug_log('✅ Menú principal registrado: ' . $main_page);
         } else {
-            error_log('[COSAS_AMAZON_DEBUG] ❌ Error registrando menú principal');
+            $this->debug_log('❌ Error registrando menú principal');
         }
 
-        error_log('[COSAS_AMAZON_DEBUG] Menú principal registrado correctamente');
+        $this->debug_log('Menú principal registrado correctamente');
     }
     
     public function admin_init() {
@@ -2123,7 +2127,7 @@ class CosasAmazonAdmin {
                 'sleep' => max(0, $sleep)
             )));
 
-            error_log('[COSAS_AMAZON_DEBUG] 🔄 Actualización de precios encolada (limit=' . $limit . ', sleep=' . $sleep . ')');
+            $this->debug_log('🔄 Actualización de precios encolada (limit=' . $limit . ', sleep=' . $sleep . ')');
 
             $summary_html = '<div class="notice notice-success"><p>✅ Actualización encolada: se ejecutará en background.</p></div>';
             wp_send_json_success([
@@ -2140,7 +2144,7 @@ class CosasAmazonAdmin {
         @set_time_limit(300); // 5 minutos
         @ini_set('max_execution_time', 300);
         
-        error_log('[COSAS_AMAZON_DEBUG] 🔄 Iniciando actualización síncrona de precios (limit=' . $limit . ', sleep=' . $sleep . ')');
+        $this->debug_log('🔄 Iniciando actualización síncrona de precios (limit=' . $limit . ', sleep=' . $sleep . ')');
         
         try {
             // Ejecutar actualización directamente
@@ -2152,7 +2156,7 @@ class CosasAmazonAdmin {
             // Guardar estadísticas
             update_option('cosas_amazon_last_update', $stats);
             
-            error_log('[COSAS_AMAZON_DEBUG] ✅ Actualización completada: ' . json_encode($stats));
+            $this->debug_log('✅ Actualización completada: ' . json_encode($stats));
             
             // Generar HTML de resumen
             $summary_html = '<div class="notice notice-success"><p><strong>✅ Actualización completada</strong></p>';
@@ -2172,7 +2176,7 @@ class CosasAmazonAdmin {
             ]);
             
         } catch (\Throwable $e) {
-            error_log('[COSAS_AMAZON_DEBUG] ❌ Error en actualización: ' . $e->getMessage());
+            $this->debug_log('❌ Error en actualización: ' . $e->getMessage());
             
             $summary_html = '<div class="notice notice-error"><p><strong>❌ Error durante la actualización</strong></p>';
             $summary_html .= '<p>' . esc_html($e->getMessage()) . '</p></div>';
@@ -2405,10 +2409,10 @@ class CosasAmazonAdmin {
                 }
             }
             if (!$main_exists) {
-                error_log('[COSAS_AMAZON_DEBUG] ⚠️ Menú principal no encontrado, intentando re-registrar');
+                $this->debug_log('⚠️ Menú principal no encontrado, intentando re-registrar');
                 $this->add_admin_menu();
             } else {
-                error_log('[COSAS_AMAZON_DEBUG] ✅ Menú principal encontrado');
+                $this->debug_log('✅ Menú principal encontrado');
             }
         }
     }
@@ -2532,16 +2536,16 @@ class CosasAmazonAdmin {
     
     // Manejador AJAX para obtener estadísticas de cache
     public function ajax_get_cache_stats() {
-        error_log('[COSAS_AMAZON_DEBUG] ajax_get_cache_stats llamado');
+        $this->debug_log('ajax_get_cache_stats llamado');
         
         if (!wp_verify_nonce($_POST['nonce'], 'cosas_amazon_nonce')) {
-            error_log('[COSAS_AMAZON_DEBUG] Nonce inválido');
+            $this->debug_log('Nonce inválido');
             wp_send_json_error('Acceso denegado');
             return;
         }
         
         if (!current_user_can('manage_options')) {
-            error_log('[COSAS_AMAZON_DEBUG] Permisos insuficientes');
+            $this->debug_log('Permisos insuficientes');
             wp_send_json_error('Permisos insuficientes');
             return;
         }
@@ -2556,7 +2560,7 @@ class CosasAmazonAdmin {
             WHERE option_name LIKE %s
         ", $transient_prefix . '%'));
         
-        error_log('[COSAS_AMAZON_DEBUG] Cache count: ' . $cache_count);
+        $this->debug_log('Cache count: ' . $cache_count);
         
         $cache_size = $wpdb->get_var($wpdb->prepare("
             SELECT SUM(LENGTH(option_value)) 
@@ -2592,7 +2596,7 @@ class CosasAmazonAdmin {
         $html .= '</div>';
         $html .= '</div>';
         
-        error_log('[COSAS_AMAZON_DEBUG] Enviando respuesta exitosa');
+        $this->debug_log('Enviando respuesta exitosa');
         wp_send_json_success($html);
     }
     

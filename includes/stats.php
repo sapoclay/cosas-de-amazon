@@ -49,22 +49,13 @@ class CosasAmazonStats {
     
     /**
      * Tracking de visualizaciones de productos
+     * OPTIMIZADO: Ahora es asíncrono usando JavaScript en lugar de PHP síncrono
+     * para no bloquear el renderizado de la página
      */
     public function track_product_views() {
-        if (!$this->has_amazon_products()) return;
-        
-        global $post;
-        $post_id = $post->ID;
-        $user_id = get_current_user_id();
-        $ip_address = $this->get_client_ip();
-        
-        // Registrar visualización
-        $this->record_stat('view', array(
-            'post_id' => $post_id,
-            'user_id' => $user_id,
-            'ip_address' => $ip_address,
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? ''
-        ));
+        // El tracking ahora se hace via JavaScript (tracking.js) de forma asíncrona
+        // Esta función se mantiene por compatibilidad pero no hace nada bloqueante
+        return;
     }
     
     /**

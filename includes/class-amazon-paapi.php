@@ -20,6 +20,9 @@ class CosasAmazonPAAPI {
     private $last_error = null;
     private $last_response = null;
     
+    // Modo debug - Solo activar para troubleshooting, genera MUCHOS logs
+    private $debug_mode = false;
+    
     // Circuit breaker properties
     private $circuit_breaker_failures = 0;
     private $circuit_breaker_last_failure = 0;
@@ -29,6 +32,10 @@ class CosasAmazonPAAPI {
     public function __construct() {
         $options = get_option('cosas_amazon_api_options', array());
         
+        // Permitir activar debug desde opciones o constante
+        $this->debug_mode = (defined('COSAS_AMAZON_DEBUG') && COSAS_AMAZON_DEBUG) || 
+                           (!empty($options['debug_mode']));
+        
         $this->access_key = isset($options['amazon_access_key']) ? $options['amazon_access_key'] : '';
         $this->secret_key = isset($options['amazon_secret_key']) ? $options['amazon_secret_key'] : '';
         $this->associate_tag = isset($options['amazon_associate_tag']) ? $options['amazon_associate_tag'] : '';
@@ -36,6 +43,17 @@ class CosasAmazonPAAPI {
         
         // Configurar host según región
         $this->host = $this->getHostForRegion($this->region);
+    }
+    
+    /**
+     * Log helper - solo escribe si debug está activo o es un error crítico
+     * @param string $message Mensaje a loguear
+     * @param bool $force Forzar log aunque debug esté desactivado (para errores críticos)
+     */
+    private function log($message, $force = false) {
+        if ($this->debug_mode || $force) {
+            error_log('[CosasAmazon PA-API] ' . $message);
+        }
     }
     
     /**
@@ -85,11 +103,11 @@ class CosasAmazonPAAPI {
         if ($time_since_last_failure > $this->circuit_breaker_timeout) {
             // Reset del circuit breaker para intentar de nuevo
             $this->circuit_breaker_failures = 0;
-            error_log('[CosasAmazon PA-API] 🔄 Circuit breaker reset - Reintentando después de ' . $time_since_last_failure . ' segundos');
+            $this->log('Circuit breaker reset - Reintentando después de ' . $time_since_last_failure . ' segundos');
             return false;
         }
         
-        error_log('[CosasAmazon PA-API] 🚫 Circuit breaker ABIERTO - ' . $this->circuit_breaker_failures . ' fallos, esperando ' . ($this->circuit_breaker_timeout - $time_since_last_failure) . ' segundos más');
+        $this->log('Circuit breaker ABIERTO - ' . $this->circuit_breaker_failures . ' fallos, esperando ' . ($this->circuit_breaker_timeout - $time_since_last_failure) . ' segundos más');
         return true;
     }
     
@@ -99,10 +117,10 @@ class CosasAmazonPAAPI {
     private function recordCircuitFailure() {
         $this->circuit_breaker_failures++;
         $this->circuit_breaker_last_failure = time();
-        error_log('[CosasAmazon PA-API] ❌ Circuit breaker: Registrando fallo #' . $this->circuit_breaker_failures);
+        $this->log('Circuit breaker: Registrando fallo #' . $this->circuit_breaker_failures);
         
         if ($this->circuit_breaker_failures >= $this->circuit_breaker_threshold) {
-            error_log('[CosasAmazon PA-API] 🚫 Circuit breaker ABIERTO - Demasiados fallos (' . $this->circuit_breaker_failures . ')');
+            $this->log('Circuit breaker ABIERTO - Demasiados fallos (' . $this->circuit_breaker_failures . ')', true);
         }
     }
     
@@ -111,7 +129,7 @@ class CosasAmazonPAAPI {
      */
     private function recordCircuitSuccess() {
         if ($this->circuit_breaker_failures > 0) {
-            error_log('[CosasAmazon PA-API] ✅ Circuit breaker: Éxito después de ' . $this->circuit_breaker_failures . ' fallos - Reset');
+            $this->log('Circuit breaker: Éxito después de ' . $this->circuit_breaker_failures . ' fallos - Reset');
             $this->circuit_breaker_failures = 0;
         }
     }
@@ -123,7 +141,7 @@ class CosasAmazonPAAPI {
         $configured = !empty($this->access_key) && !empty($this->secret_key) && !empty($this->associate_tag);
         
         if (!$configured) {
-            error_log('[CosasAmazon PA-API] Configuración incompleta - Access Key: ' . 
+            $this->log('Configuración incompleta - Access Key: ' . 
                      (!empty($this->access_key) ? 'OK' : 'VACÍO') . 
                      ', Secret Key: ' . (!empty($this->secret_key) ? 'OK' : 'VACÍO') . 
                      ', Associate Tag: ' . (!empty($this->associate_tag) ? 'OK' : 'VACÍO'));
@@ -140,7 +158,7 @@ class CosasAmazonPAAPI {
         $enabled = isset($options['api_enabled']) && $options['api_enabled'] == 1;
         
         if (!$enabled) {
-            error_log('[CosasAmazon PA-API] API deshabilitada en configuración');
+            $this->log('API deshabilitada en configuración');
         }
         
         return $enabled;
@@ -274,18 +292,18 @@ class CosasAmazonPAAPI {
         
         if (!$this->isConfigured() || !$this->isEnabled()) {
             $this->last_error = 'No configurado o deshabilitado';
-            error_log('[CosasAmazon PA-API] getProductData: No configurado o deshabilitado');
+            $this->log('getProductData: No configurado o deshabilitado');
             return false;
         }
         
         // Circuit breaker: Verificar si debemos intentar la llamada
         if ($this->isCircuitOpen()) {
             $this->last_error = 'Circuit breaker abierto - Amazon PA API temporalmente no disponible';
-            error_log('[CosasAmazon PA-API] � Circuit breaker abierto - Evitando llamada innecesaria');
+            $this->log('Circuit breaker abierto - Evitando llamada innecesaria');
             return false;
         }
         
-        error_log('[CosasAmazon PA-API] �🚀 getProductData: Iniciando petición para ASIN: ' . $asin);
+        $this->log('getProductData: Iniciando petición para ASIN: ' . $asin);
         
         // Guardar configuración original
         $original_region = $this->region;
@@ -296,7 +314,7 @@ class CosasAmazonPAAPI {
         // 1. Intentar con región principal
         $result = $this->tryGetProductDataFromRegion($asin, $this->region);
         if ($result !== false) {
-            error_log('[CosasAmazon PA-API] ✅ Éxito con región principal: ' . $this->region);
+            $this->log('Éxito con región principal: ' . $this->region);
             $this->recordCircuitSuccess();
             return $result;
         }
@@ -305,20 +323,20 @@ class CosasAmazonPAAPI {
     $primary_error = $this->getLastError();
     $primary_error_string = $this->errorToString($primary_error);
     $all_errors[$this->region] = $primary_error;
-    error_log('[CosasAmazon PA-API] ❌ Falló región principal ' . $this->region . ': ' . $primary_error_string);
+    $this->log('Falló región principal ' . $this->region . ': ' . $primary_error_string);
         
     // 2. Si InternalFailure persistente, intentar con regiones de fallback
     if ($primary_error_string !== '' && strpos($primary_error_string, 'InternalFailure') !== false) {
-            error_log('[CosasAmazon PA-API] 🔄 InternalFailure detectado - Iniciando fallback multi-región');
+            $this->log('InternalFailure detectado - Iniciando fallback multi-región');
             
             $fallback_regions = $this->getFallbackRegions($original_region);
             
             foreach ($fallback_regions as $fallback_region) {
-                error_log('[CosasAmazon PA-API] 🌍 Intentando región de fallback: ' . $fallback_region);
+                $this->log('Intentando región de fallback: ' . $fallback_region);
                 
                 $result = $this->tryGetProductDataFromRegion($asin, $fallback_region);
                 if ($result !== false) {
-                    error_log('[CosasAmazon PA-API] ✅ Éxito con región de fallback: ' . $fallback_region);
+                    $this->log('Éxito con región de fallback: ' . $fallback_region);
                     $had_any_success = true;
                     
                     // Restaurar configuración original
@@ -339,7 +357,7 @@ class CosasAmazonPAAPI {
                 $fallback_error = $this->getLastError();
                 $fallback_error_string = $this->errorToString($fallback_error);
                 $all_errors[$fallback_region] = $fallback_error;
-                error_log('[CosasAmazon PA-API] ❌ Falló región de fallback ' . $fallback_region . ': ' . $fallback_error_string);
+                $this->log('Falló región de fallback ' . $fallback_region . ': ' . $fallback_error_string);
             }
         }
         
@@ -368,8 +386,7 @@ class CosasAmazonPAAPI {
         }
         
         $this->last_error = $error_summary;
-        error_log('[CosasAmazon PA-API] 🛑 Fallback multi-región completado - Falló en todas las regiones');
-        error_log('[CosasAmazon PA-API] 📋 Resumen errores: ' . $error_summary);
+        $this->log('Fallback multi-región completado - Falló en todas las regiones', true);
         
         return false;
     }
@@ -438,7 +455,7 @@ class CosasAmazonPAAPI {
         $this->region = $region;
         $this->host = $this->getHostForRegion($region);
         
-        error_log('[CosasAmazon PA-API] 🎯 Intentando ASIN ' . $asin . ' en región ' . $region . ' (host: ' . $this->host . ')');
+        $this->log('Intentando ASIN ' . $asin . ' en región ' . $region);
         
         try {
             $payload = array(
@@ -458,13 +475,12 @@ class CosasAmazonPAAPI {
                 'Marketplace' => 'www.amazon.' . ($region === 'uk' ? 'co.uk' : $region)
             );
             
-            error_log('[CosasAmazon PA-API] 🔧 Payload preparado para región ' . $region . ' con tag: ' . $this->associate_tag);
-            error_log('[CosasAmazon PA-API] 🛒 Marketplace: ' . $payload['Marketplace']);
+            $this->log('Payload preparado para región ' . $region);
             
             $response = $this->makeRequestWithRetry('GetItems', $payload);
             $this->last_response = $response;
             
-            error_log('[CosasAmazon PA-API] 📥 Respuesta recibida de ' . $region . ': ' . (is_string($response) ? substr($response, 0, 200) : json_encode($response)));
+            $this->log('Respuesta recibida de ' . $region);
             
             // Si la respuesta es un string, intentar decodificarla
             if (is_string($response)) {
@@ -475,27 +491,26 @@ class CosasAmazonPAAPI {
             }
             
             if ($response && isset($response['ItemsResult']['Items'][0])) {
-                error_log('[CosasAmazon PA-API] ✅ Item encontrado en región ' . $region . ', procesando datos');
+                $this->log('Item encontrado en región ' . $region);
                 $parsed_data = $this->parseProductData($response['ItemsResult']['Items'][0]);
-                error_log('[CosasAmazon PA-API] 📋 Datos procesados de ' . $region . ': ' . json_encode($parsed_data));
                 return $parsed_data;
             } elseif ($response && isset($response['ItemsResult']['Items']) && empty($response['ItemsResult']['Items'])) {
                 $this->last_error = 'No se encontraron items para el ASIN: ' . $asin . ' en región ' . $region;
-                error_log('[CosasAmazon PA-API] ❌ No se encontraron items para el ASIN en región ' . $region);
+                $this->log('No se encontraron items para el ASIN en región ' . $region);
                 return false;
             } elseif ($response && isset($response['Errors'])) {
                 $this->last_error = 'Errores en respuesta de ' . $region . ': ' . json_encode($response['Errors']);
-                error_log('[CosasAmazon PA-API] ❌ Errores en respuesta de ' . $region . ': ' . json_encode($response['Errors']));
+                $this->log('Errores en respuesta de ' . $region);
                 return false;
             } else {
                 $this->last_error = 'Respuesta inesperada o vacía de región ' . $region;
-                error_log('[CosasAmazon PA-API] ❌ Respuesta inesperada de ' . $region . ': ' . (is_string($response) ? $response : json_encode($response)));
+                $this->log('Respuesta inesperada de ' . $region);
                 return false;
             }
             
         } catch (Exception $e) {
             $this->last_error = 'Excepción en región ' . $region . ': ' . $e->getMessage();
-            error_log('[CosasAmazon PA-API] ❌ Excepción en región ' . $region . ': ' . $e->getMessage());
+            $this->log('Excepción en región ' . $region . ': ' . $e->getMessage());
             return false;
         }
     }
@@ -655,22 +670,19 @@ class CosasAmazonPAAPI {
         $env_info_tmp = $this->detectLocalEnvironment();
         $is_local = is_array($env_info_tmp) ? ($env_info_tmp['is_local'] ?? false) : false;
 
-        // Solo loguear el primer intento y el resumen final
+        // Ajustar reintentos según entorno
         if ($is_local) {
             $max_retries = 3;
-            error_log('[CosasAmazon PA-API] 🏠 Entorno local detectado - Reduciendo reintentos a ' . $max_retries);
-        } else {
-            error_log('[CosasAmazon PA-API] 🌐 Entorno de producción - Usando ' . $max_retries . ' reintentos agresivos');
+            $this->log('Entorno local detectado - Reduciendo reintentos a ' . $max_retries);
         }
 
         $first_error = null;
         for ($attempt = 1; $attempt <= $max_retries; $attempt++) {
             try {
-                if ($attempt === 1) {
-                    error_log('[CosasAmazon PA-API] 🔄 Intento 1/' . $max_retries . ' para operación: ' . $operation);
-                }
                 $result = $this->makeRequest($operation, $payload);
-                error_log('[CosasAmazon PA-API] ✅ Petición exitosa en intento ' . $attempt);
+                if ($attempt > 1) {
+                    $this->log('Petición exitosa en intento ' . $attempt);
+                }
                 return $result;
             } catch (Exception $e) {
                 $error_message = $e->getMessage();
@@ -685,14 +697,8 @@ class CosasAmazonPAAPI {
                     $should_retry = true;
                 }
                 if (!$should_retry || $attempt === $max_retries) {
-                    // Solo loguear el último error
-                    error_log('[CosasAmazon PA-API] 🛑 Error final en intento ' . $attempt . ': ' . $error_message);
-                    if ($is_internal_failure) {
-                        error_log('[CosasAmazon PA-API] 💡 InternalFailure persistente - Amazon PA API está teniendo problemas temporales');
-                    }
-                    if ($first_error && $attempt > 1) {
-                        error_log('[CosasAmazon PA-API] � Primer error fue: ' . $first_error);
-                    }
+                    // Solo loguear el error final si debug está activo
+                    $this->log('Error final en intento ' . $attempt . ': ' . substr($error_message, 0, 100));
                     throw $last_exception;
                 }
                 // Calcular delay exponencial con jitter mejorado
@@ -704,10 +710,6 @@ class CosasAmazonPAAPI {
                     $jitter = rand(100, 300) / 1000;
                 }
                 $total_delay = max(0.1, $delay + $jitter);
-                // Solo loguear el delay en el primer intento
-                if ($attempt === 1) {
-                    error_log('[CosasAmazon PA-API] ⏱️ Esperando ' . round($total_delay, 2) . ' segundos antes del siguiente intento...');
-                }
                 usleep((int) ($total_delay * 1000000));
             }
         }
@@ -792,7 +794,6 @@ class CosasAmazonPAAPI {
         // Verificar errores de alta prioridad primero
         foreach ($high_priority_retryable as $error) {
             if (stripos($error_message, $error) !== false) {
-                error_log('[CosasAmazon PA-API] 🔥 Error de ALTA PRIORIDAD detectado para reintento: ' . $error);
                 return true;
             }
         }
@@ -814,7 +815,6 @@ class CosasAmazonPAAPI {
         
         foreach ($network_retryable_errors as $retryable_error) {
             if (stripos($error_message, $retryable_error) !== false) {
-                error_log('[CosasAmazon PA-API] 🌐 Error de red detectado para reintento: ' . $retryable_error);
                 return true;
             }
         }
@@ -837,7 +837,6 @@ class CosasAmazonPAAPI {
         
         foreach ($non_retryable_errors as $non_retryable_error) {
             if (stripos($error_message, $non_retryable_error) !== false) {
-                error_log('[CosasAmazon PA-API] 🚫 Error NO recuperable detectado: ' . $non_retryable_error);
                 return false;
             }
         }
@@ -847,11 +846,9 @@ class CosasAmazonPAAPI {
         if (stripos($error_message, 'error') !== false || 
             stripos($error_message, 'failed') !== false ||
             stripos($error_message, 'exception') !== false) {
-            error_log('[CosasAmazon PA-API] 🤔 Error genérico, permitiendo un reintento cauteloso');
             return true;
         }
         
-        error_log('[CosasAmazon PA-API] ❌ Error no identificado, no reintentando: ' . $error_message);
         return false;
     }
 
@@ -887,10 +884,10 @@ class CosasAmazonPAAPI {
             'Authorization: ' . $signature
         );
         
-        // Log de la petición para debugging
-        error_log('[CosasAmazon PA-API] URL: ' . $url);
-        error_log('[CosasAmazon PA-API] Payload: ' . $json_payload);
-        error_log('[CosasAmazon PA-API] Headers: ' . json_encode($request_headers));
+        // Log de la petición solo en modo debug
+        $this->log('URL: ' . $url);
+        $this->log('Payload: ' . $json_payload);
+        $this->log('Headers: ' . json_encode($request_headers));
         
         // Realizar petición
         $response = wp_remote_post($url, array(
@@ -903,53 +900,51 @@ class CosasAmazonPAAPI {
         
         if (is_wp_error($response)) {
             $error_message = 'Error de conexión: ' . $response->get_error_message();
-            error_log('[CosasAmazon PA-API] ' . $error_message);
+            $this->log($error_message, true); // Error crítico
             throw new Exception($error_message);
         }
         
         $body = wp_remote_retrieve_body($response);
         $http_code = wp_remote_retrieve_response_code($response);
         
-        // Log de la respuesta para debugging
-        error_log('[CosasAmazon PA-API] HTTP ' . $http_code . ' - Response: ' . substr($body, 0, 1000));
+        // Log de la respuesta solo en modo debug
+        $this->log('HTTP ' . $http_code . ' - Response: ' . substr($body, 0, 200));
         
         // Intentar decodificar la respuesta incluso si hay error HTTP
         $data = json_decode($body, true);
         
         // Para errores HTTP 500, Amazon suele devolver XML, intentar parsearlo
         if ($http_code === 500 && $data === null && strpos($body, '<InternalFailure>') !== false) {
-            error_log('[CosasAmazon PA-API] Error HTTP 500 - Amazon InternalFailure detectado');
-            
             // Intentar parsear XML para obtener más información
             if (function_exists('simplexml_load_string')) {
-                $xml = simplexml_load_string($body);
+                $xml = @simplexml_load_string($body);
                 if ($xml && isset($xml->Message)) {
-                    $error_message = 'Error Amazon InternalFailure: ' . (string)$xml->Message;
+                    $error_message = 'Amazon InternalFailure';
                 } else {
-                    $error_message = 'Error Amazon InternalFailure: The request processing has failed due to some unknown error, exception or failure. Please retry again.';
+                    $error_message = 'Amazon InternalFailure';
                 }
             } else {
-                $error_message = 'Error Amazon InternalFailure: The request processing has failed due to some unknown error, exception or failure. Please retry again.';
+                $error_message = 'Amazon InternalFailure';
             }
-            
-            error_log('[CosasAmazon PA-API] ' . $error_message);
+            // Solo log en debug para evitar llenar el error_log
+            $this->log('HTTP 500 - ' . $error_message);
             throw new Exception($error_message);
         }
         
         if ($http_code !== 200) {
-            $error_message = 'Error HTTP ' . $http_code . ': ' . $body;
-            error_log('[CosasAmazon PA-API] ' . $error_message);
+            $error_message = 'Error HTTP ' . $http_code;
+            $this->log($error_message . ': ' . substr($body, 0, 200));
             throw new Exception($error_message);
         }
         
         if (json_last_error() !== JSON_ERROR_NONE) {
             $error_message = 'Error parsing JSON: ' . json_last_error_msg();
-            error_log('[CosasAmazon PA-API] ' . $error_message);
+            $this->log($error_message);
             throw new Exception($error_message);
         }
         
-        // Log del resultado exitoso
-        error_log('[CosasAmazon PA-API] Respuesta exitosa obtenida');
+        // Log del resultado exitoso solo en debug
+        $this->log('Respuesta exitosa obtenida');
         
         return $data;
     }
@@ -1006,9 +1001,6 @@ class CosasAmazonPAAPI {
                            $signed_headers . "\n" .
                            hash('sha256', $payload);
         
-        // Log del canonical request
-        error_log('[CosasAmazon PA-API] Canonical request: ' . $canonical_request);
-        
         // Crear string to sign con la región AWS correcta
         $algorithm = 'AWS4-HMAC-SHA256';
         $credential_scope = $date . '/' . $aws_region . '/' . $this->service . '/aws4_request';
@@ -1016,9 +1008,6 @@ class CosasAmazonPAAPI {
                          $timestamp . "\n" .
                          $credential_scope . "\n" .
                          hash('sha256', $canonical_request);
-        
-        // Log del string to sign
-        error_log('[CosasAmazon PA-API] String to sign (región: ' . $aws_region . '): ' . $string_to_sign);
         
         // Crear signing key paso a paso con la región AWS correcta
         $k_date = hash_hmac('sha256', $date, 'AWS4' . $this->secret_key, true);
@@ -1029,17 +1018,11 @@ class CosasAmazonPAAPI {
         // Crear signature
         $signature = hash_hmac('sha256', $string_to_sign, $k_signing);
         
-        // Log de la signature
-        error_log('[CosasAmazon PA-API] Signature: ' . $signature);
-        
         // Crear authorization header
         $authorization = $algorithm . ' ' .
                         'Credential=' . $this->access_key . '/' . $credential_scope . ', ' .
                         'SignedHeaders=' . $signed_headers . ', ' .
                         'Signature=' . $signature;
-        
-        // Log del authorization header
-        error_log('[CosasAmazon PA-API] Authorization: ' . $authorization);
         
         return $authorization;
     }
@@ -1085,7 +1068,7 @@ class CosasAmazonPAAPI {
                     'Marketplace' => $config['marketplace']
                 );
                 
-                error_log('[CosasAmazon PA-API] Testing config: ' . json_encode($config));
+                $this->log('Testing config: ' . json_encode($config));
                 
                 $response = $this->makeRequest('GetItems', $payload);
                 
@@ -1118,9 +1101,7 @@ class CosasAmazonPAAPI {
         $is_local = $this->isLocalEnvironment();
         $environment_info = $this->getEnvironmentInfo();
         
-        error_log('[CosasAmazon PA-API] 🔍 Iniciando test de conexión');
-        error_log('[CosasAmazon PA-API] 🌐 Entorno: ' . ($is_local ? 'LOCAL' : 'PRODUCCIÓN'));
-        error_log('[CosasAmazon PA-API] 🖥️ Host: ' . $environment_info['host']);
+        $this->log('Iniciando test de conexión - Entorno: ' . ($is_local ? 'LOCAL' : 'PRODUCCIÓN'));
         
         // Validar configuración básica
         $validation_errors = $this->validateConfiguration();
@@ -1158,26 +1139,14 @@ class CosasAmazonPAAPI {
             $test_asin = isset($test_asins_by_region[$this->region]) ? 
                         $test_asins_by_region[$this->region] : 'B08N5WRWNW';
             
-            error_log('[CosasAmazon PA-API] 🧪 Iniciando test con ASIN: ' . $test_asin . ' (región: ' . $this->region . ')');
-            error_log('[CosasAmazon PA-API] ⚙️ Configuración - Region: ' . $this->region . ', Host: ' . $this->host);
-            error_log('[CosasAmazon PA-API] 🔑 Access Key: ' . (!empty($this->access_key) ? 'OK (' . strlen($this->access_key) . ' chars)' : 'VACÍO'));
-            error_log('[CosasAmazon PA-API] 🔐 Secret Key: ' . (!empty($this->secret_key) ? 'OK (' . strlen($this->secret_key) . ' chars)' : 'VACÍO'));
-            error_log('[CosasAmazon PA-API] 🏷️ Associate Tag: ' . (!empty($this->associate_tag) ? $this->associate_tag : 'VACÍO'));
-            
-            // En entorno local, advertir sobre limitaciones
-            if ($is_local) {
-                error_log('[CosasAmazon PA-API] ⚠️ ENTORNO LOCAL: InternalFailure es muy común (tasa éxito ~30-40%)');
-                error_log('[CosasAmazon PA-API] 💡 SUGERENCIA: En local usar un ASIN válido o las credenciales de un entorno real');
-            } else {
-                error_log('[CosasAmazon PA-API] 🚀 ENTORNO PRODUCCIÓN: Usando sistema de reintentos agresivos');
-            }
+            $this->log('Test con ASIN: ' . $test_asin . ' en región ' . $this->region);
             
             $start_time = microtime(true);
             $result = $this->getProductData($test_asin);
             $execution_time = round((microtime(true) - $start_time) * 1000, 2);
             
             if ($result && !empty($result['title'])) {
-                error_log('[CosasAmazon PA-API] ✅ Test exitoso en ' . $execution_time . 'ms - Título: ' . $result['title']);
+                $this->log('Test exitoso en ' . $execution_time . 'ms - Título: ' . substr($result['title'], 0, 50));
                 
                 $success_message = 'Conexión exitosa con Amazon PA-API en ' . $execution_time . 'ms';
                 if ($is_local) {
@@ -1204,8 +1173,7 @@ class CosasAmazonPAAPI {
                 $last_response = $this->getLastResponse();
                 $last_error_string = is_string($last_error) ? $last_error : '';
                 
-                error_log('[CosasAmazon PA-API] ❌ Test falló después de ' . $execution_time . 'ms');
-                error_log('[CosasAmazon PA-API] 📝 Último error: ' . $last_error);
+                $this->log('Test falló después de ' . $execution_time . 'ms: ' . substr($last_error, 0, 100));
                 
                 $error_details = array();
                 if ($last_error_string !== '') {
@@ -1250,7 +1218,7 @@ class CosasAmazonPAAPI {
             }
             
         } catch (Exception $e) {
-            error_log('[CosasAmazon PA-API] Test falló con excepción: ' . $e->getMessage());
+            $this->log('Test falló con excepción: ' . $e->getMessage());
             
             // Detectar si estamos en entorno local
             $local_env = $this->detectLocalEnvironment();
